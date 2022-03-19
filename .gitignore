@@ -3,5 +3,7 @@ __pycache__/
 .idea/
 .tmp/
 .vscode/
-data/
+data*/
 *.pkl
+weights/
+runs/
