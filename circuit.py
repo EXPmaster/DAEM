@@ -67,9 +67,10 @@ def generate_data(num_data, num_layers, num_qubits, threshold=0.3, num_samples=1
 
 def generate_data_v2(num_data, num_layers, num_qubits, threshold=0.3, num_samples=10_000):
     qubit_gates = [
-        [ops.rx, ops.ry, ops.rz, ops.X, ops.Y, ops.Z, ops.H],
+        [ops.rx, ops.ry, ops.rz, ops.X, ops.Y, ops.Z, ops.H, ops.S, ops.T],
         [ops.CNOT, ops.CZ]
     ]
+    observable_list = [ops.X, ops.Y, ops.Z]
     data_list = []
     count = 0
     while True:
@@ -94,35 +95,39 @@ def generate_data_v2(num_data, num_layers, num_qubits, threshold=0.3, num_sample
                 circuit.append([gate(*[input_qbits[i] for i in select_qubit_idx])], strategy=InsertStrategy.NEW_THEN_INLINE)
                 circuit.append([ops.I(input_qbits[i]) for i in range(num_qubits) if i not in select_qubit_idx], strategy=InsertStrategy.INLINE)
         operations = cirq.unitary(circuit)
-        z_obs = cirq.Z(input_qbits[0])  # cirq.PauliString(cirq.Z(q) for q in input_qbits)
+        obs = cirq.PauliString(np.random.choice(observable_list)(input_qbits[0]))  # cirq.PauliString(np.random.choice(observable_list)(q) for q in input_qbits)    
+
         # ********** Simulate ideal circuit **********
         # output_state = cirq.Simulator().simulate(circuit).final_state_vector
-
         ops_moments = np.stack([cirq.unitary(m) for m in circuit])
         assert ops_moments.shape == (num_layers, 2 ** num_qubits, 2 ** num_qubits), 'illegal gate matrix shape'
-        output_value = cirq.Simulator().simulate_expectation_values(circuit, observables=[z_obs])
+        output_value = cirq.Simulator().simulate_expectation_values(circuit, observables=[obs])
         expectation_ideal = round(output_value[0].real, 5)
         if abs(expectation_ideal) < threshold:
             continue
 
         # ********** Simulate noisy circuit **********
         noisy_circuit = circuit.with_noise(cirq.depolarize(p=0.01))
-        # collector = cirq.PauliSumCollector(noisy_circuit, z_obs, samples_per_term=num_samples)
+        # collector = cirq.PauliSumCollector(noisy_circuit, obs, samples_per_term=num_samples)
         # collector.collect(sampler=cirq.DensityMatrixSimulator())
         # expectation_noisy = collector.estimated_energy()
-        rho = cirq.DensityMatrixSimulator().simulate(noisy_circuit).final_density_matrix
-        psum = cirq.PauliSum.from_boolean_expression(
-            sympy_parser.parse_expr('x0'),
-            {'x0': cirq.NamedQubit('q0')})
-        psum = cirq.PauliString(cirq.Z(input_qbits[0]))
-        energy = psum.expectation_from_density_matrix(
-            state=rho, qubit_map={q: i for i, q in enumerate(input_qbits)}
-        )
-        expectation_noisy = round(energy.real, 5)
 
+        try:
+            rho = cirq.DensityMatrixSimulator().simulate(noisy_circuit).final_density_matrix
+            # psum = cirq.PauliSum.from_boolean_expression(
+            #     sympy_parser.parse_expr('x0'),
+            #     {'x0': cirq.NamedQubit('q0')})
+            psum = obs
+            energy = psum.expectation_from_density_matrix(
+                state=rho, qubit_map={q: i for i, q in enumerate(input_qbits)}
+            )
+        except Exception as e:
+            continue
+        expectation_noisy = round(energy.real, 5)
+        # print(expectation_ideal, expectation_noisy)
         count += 1
         print('\rProcess: {:.2f}%'.format(100 * count / num_data), end='')
-        data_list.append([operations, ops_moments, expectation_ideal, expectation_noisy])
+        data_list.append([operations, ops_moments, cirq.unitary(obs), expectation_ideal, expectation_noisy])
         if count >= num_data:
             break
 
@@ -165,7 +170,7 @@ def run_multiprocess(args):
 def run_test():
     print('runing test...')
     generate_data_v2(100, 6, 4)
-    print('Done without saving data.')
+    print('\nDone without saving data.')
 
 
 def toy_circuit():
@@ -182,10 +187,10 @@ if __name__ == '__main__':
     parser.add_argument('--depth', default=5, type=int, help='depth of the circuit')
     parser.add_argument('--num-qubits', default=4, type=int, help='the number of qubits used in the circuit')
     parser.add_argument('--num-circuits', default=600_000, type=int, help='the number of circuits to build')
-    parser.add_argument('--threshold', default=0.0, type=float, help='keep data for exp_ideal >= threshold')
+    parser.add_argument('--threshold', default=0.005, type=float, help='keep data for exp_ideal >= threshold')
     parser.add_argument('--num-workers', default=16, type=int, help='the number of processes used in generating data')
     parser.add_argument('--save-dir', default='./data2', type=str)
-    parser.add_argument('--data-name', default='dataset_1.pkl', type=str)
+    parser.add_argument('--data-name', default='dataset_0.pkl', type=str)
     parser.add_argument('--train-name', default='trainset_1.pkl', type=str)
     parser.add_argument('--test-name', default='testset_1.pkl', type=str)
     parser.add_argument('--generate', default=False, action='store_true', help='whether or not generate new data')

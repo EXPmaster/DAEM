@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 
-from model import QuantumModel, QuantumModelv2
+from model import QuantumModel, QuantumModelv2, QuantumModelv3
 from utils import build_dataloader, AverageMeter, abs_deviation
 from torch.utils.tensorboard import SummaryWriter
 
@@ -35,11 +35,12 @@ def main(args):
 def train(epoch, args, loader, model, loss_fn, optimizer):
     model.train()
     loss_accumulator = AverageMeter()
-    for itr, (moment_real, moment_imag, ops_real, ops_imag, e_ideal, e_noisy, delta) in enumerate(loader):
-        moment_real, moment_imag = moment_real.to(args.device), moment_imag.to(args.device)
-        ops_real, ops_imag, delta = ops_real.to(args.device), ops_imag.to(args.device), delta.to(args.device)
+    for itr, (moments, ops, observables, e_ideal, e_noisy, delta) in enumerate(loader):
+        moments = moments.to(args.device)
+        ops, delta = ops.to(args.device), delta.to(args.device)
+        observables = observables.to(args.device)
         optimizer.zero_grad()
-        predicts = model(moment_real, moment_imag, ops_real, ops_imag)
+        predicts = model(moments, ops, observables)
         loss = loss_fn(predicts, delta)
         loss_accumulator.update(loss)
         loss.backward()
@@ -54,10 +55,11 @@ def validate(epoch, args, loader, model, loss_fn):
     model.eval()
     metric = AverageMeter()
     losses = AverageMeter()
-    for itr, (moment_real, moment_imag, ops_real, ops_imag, e_ideal, e_noisy, delta) in enumerate(loader):
-        moment_real, moment_imag = moment_real.to(args.device), moment_imag.to(args.device)
-        ops_real, ops_imag, e_ideal, e_noisy, delta = ops_real.to(args.device), ops_imag.to(args.device), e_ideal.to(args.device), e_noisy.to(args.device), delta.to(args.device)
-        predicts = model(moment_real, moment_imag, ops_real, ops_imag)
+    for itr, (moments, ops, observables, e_ideal, e_noisy, delta) in enumerate(loader):
+        moments = moments.to(args.device)
+        ops, e_ideal, e_noisy, delta = ops.to(args.device), e_ideal.to(args.device), e_noisy.to(args.device), delta.to(args.device)
+        observables = observables.to(args.device)
+        predicts = model(moments, ops, observables)
         loss = loss_fn(predicts, delta)
         mitigate_results = e_noisy + predicts
         metric.update(abs_deviation(mitigate_results, e_ideal))
@@ -72,8 +74,8 @@ def validate(epoch, args, loader, model, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-path', default='data2/trainset_1.pkl', type=str)
-    parser.add_argument('--test-path', default='data2/testset_1.pkl', type=str)
+    parser.add_argument('--train-path', default='data3/trainset_1.pkl', type=str)
+    parser.add_argument('--test-path', default='data3/testset_1.pkl', type=str)
     parser.add_argument('--logdir', default='runs/v1', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='QuantumModelv2', type=str, help='what model to use: [QuantumModel, QuantumModelv2]')
     parser.add_argument('--model-path', default='weights', type=str, help='duplicated')

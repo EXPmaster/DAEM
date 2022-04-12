@@ -18,10 +18,10 @@ def test(args):
     loader = DataLoader(QuantumDataset(args.test_path), batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
     metric = AverageMeter()
     with torch.no_grad():
-        for itr, (moment_real, moment_imag, ops_real, ops_imag, e_ideal, e_noisy, delta) in enumerate(loader):
-            moment_real, moment_imag = moment_real.to(args.device), moment_imag.to(args.device)
-            ops_real, ops_imag, e_ideal, e_noisy = ops_real.to(args.device), ops_imag.to(args.device), e_ideal.to(args.device), e_noisy.to(args.device)
-            predicts = model(moment_real, moment_imag, ops_real, ops_imag)
+        for itr, (moments, ops, e_ideal, e_noisy, delta) in enumerate(loader):
+            moments = moments.to(args.device)
+            ops, e_ideal, e_noisy = ops.to(args.device), e_ideal.to(args.device), e_noisy.to(args.device)
+            predicts = model(moments, ops)
             mitigate_results = e_noisy + predicts
             metric.update(abs_deviation(mitigate_results, e_ideal))
 
