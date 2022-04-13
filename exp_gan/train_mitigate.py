@@ -8,36 +8,39 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import *
 from utils import AverageMeter, build_dataloader, abs_deviation
-from datasets import SurrogateDataset
+from datasets import MitigateDataset
 
 
 def main(args):
-    trainset, testset, train_loader, test_loader = build_dataloader(args, SurrogateDataset)
+    trainset, testset, train_loader, test_loader = build_dataloader(args, MitigateDataset)
     loss_fn = nn.MSELoss()
-    print(f'Model type: {args.model_type}.')
-    model = SurrogateModel(dim_in=16 * args.num_layers * args.num_qubits + 8).to(args.device)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    model_s = SurrogateModel(dim_in=16 * args.num_layers * args.num_qubits + 8).to(args.device)
+    model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
+    model_g = MitigateModel(num_layers=args.num_layers, num_qubits=args.num_qubits, dim_in=9).to(args.device)
+    optimizer = optim.Adam([{'params': model_g.parameters()},
+                            {'params': model_s.parameters(), 'lr': 1e-6}], lr=args.lr)
     print('Start training...')
 
     best_metric = 0.02
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
-        train(epoch, args, train_loader, model, loss_fn, optimizer)
-        metric = validate(epoch, args, test_loader, model, loss_fn)
+        train(epoch, args, train_loader, model_g, model_s, loss_fn, optimizer)
+        metric = validate(epoch, args, test_loader, model_g, model_s, loss_fn)
+        # if metric < best_metric:
+        #     print('Saving model...')
+        #     best_metric = metric
+        #     torch.save(model, os.path.join(args.logdir, 'best.pt'))
 
-        if metric < best_metric:
-            print('Saving model...')
-            best_metric = metric
-            torch.save(model.state_dict(), os.path.join(args.logdir, 'best.pt'))
 
-
-def train(epoch, args, loader, model, loss_fn, optimizer):
-    model.train()
+def train(epoch, args, loader, model_g, model_s, loss_fn, optimizer):
+    model_g.train()
+    model_s.train()
     loss_accumulator = AverageMeter()
-    for itr, (prs, obs, gts) in enumerate(loader):
-        prs, obs, gts = prs.to(args.device), obs.to(args.device), gts.to(args.device)
+    for itr, (obs, exp_noisy, gts) in enumerate(loader):
+        obs, exp_noisy, gts = obs.to(args.device), exp_noisy.to(args.device), gts.to(args.device)
         optimizer.zero_grad()
-        predicts = model(prs, obs)
+        prs = model_g(obs, exp_noisy)
+        predicts = model_s(prs, obs)
         loss = loss_fn(predicts, gts)
         loss_accumulator.update(loss)
         loss.backward()
@@ -48,12 +51,14 @@ def train(epoch, args, loader, model, loss_fn, optimizer):
 
 
 @torch.no_grad()
-def validate(epoch, args, loader, model, loss_fn):
-    model.eval()
+def validate(epoch, args, loader, model_g, model_s, loss_fn):
+    model_g.eval()
+    model_s.eval()
     metric = AverageMeter()
-    for itr,(prs, obs, gts) in enumerate(loader):
-        prs, obs, gts = prs.to(args.device), obs.to(args.device), gts.to(args.device)
-        predicts = model(prs, obs)
+    for itr, (obs, exp_noisy, gts) in enumerate(loader):
+        obs, exp_noisy, gts = obs.to(args.device), exp_noisy.to(args.device), gts.to(args.device)
+        prs = model_g(obs, exp_noisy)
+        predicts = model_s(prs, obs)
         metric.update(abs_deviation(predicts, gts))
 
     value = metric.getval()
@@ -65,11 +70,12 @@ def validate(epoch, args, loader, model, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-path', default='../data_surrogate/env1_data.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_surrogate/env1_data.pkl', type=str)
+    parser.add_argument('--train-path', default='../data_mitigate/trainset_1.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/testset_1.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env1/best.pt', type=str)
     parser.add_argument('--logdir', default='../runs/env1', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
-    parser.add_argument('--batch-size', default=32, type=int)
+    parser.add_argument('--batch-size', default=128, type=int)
     parser.add_argument('--num-layers', default=8, type=int, help='depth of the circuit')
     parser.add_argument('--num-qubits', default=5, type=int, help='number of qubits')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')

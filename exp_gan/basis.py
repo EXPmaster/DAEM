@@ -1,9 +1,25 @@
-__all__ = ['GateRX', 'GateRY', 'GateRZ', 'GateRYZ', 'GateRZX', 'GateRXY', 'GatePiX',
+__all__ = ['RandomObservable', 'GateRX', 'GateRY', 'GateRZ', 'GateRYZ', 'GateRZX', 'GateRXY', 'GatePiX',
         'GatePiY', 'GatePiZ', 'GatePiYZ', 'GatePiZX', 'GatePiXY']
 
 
 import cirq
 import numpy as np
+from scipy.stats import unitary_group
+
+
+class RandomObservable(cirq.Gate):
+    def __init__(self):
+        super(RandomObservable, self)
+        self.matrix = unitary_group.rvs(2)
+
+    def _num_qubits_(self):
+        return 1
+
+    def _unitary_(self):
+        return self.matrix
+
+    def _circuit_diagram_info_(self, args):
+        return "RndOBS"
 
 
 class GatePi(cirq.Gate):

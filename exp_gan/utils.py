@@ -1,6 +1,5 @@
 import torch
 from torch.utils.data import DataLoader
-from datasets import SurrogateDataset
 
 
 class ConfigDict(dict):
@@ -18,10 +17,10 @@ class ConfigDict(dict):
         del self[name]
 
 
-def build_dataloader(args, dataset_name):
-    trainset = eval(dataset_name)(args.train_path)
+def build_dataloader(args, dataset):
+    trainset = dataset(args.train_path)
     train_loader = DataLoader(trainset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
-    testset = eval(dataset_name)(args.test_path)
+    testset = dataset(args.test_path)
     test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
 
     return trainset, testset, train_loader, test_loader
