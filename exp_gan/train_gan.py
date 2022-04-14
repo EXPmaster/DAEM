@@ -50,7 +50,7 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         optimizer_d.zero_grad()
         labels = torch.full((args.batch_size, 1), 1.0, dtype=torch.float, device=args.device)
         output = model_d(exp_ideal, obs)
-        D_noisy = output.mean().item()
+        D_ideal = output.mean().item()
         lossD_real = loss_fn(output, labels)
         lossD_real.backward()
 
@@ -65,7 +65,7 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         lossD_fake1.backward()
 
         output = model_d(exp_noisy, obs)
-        D_ideal = output.mean().item()
+        D_noisy = output.mean().item()
         lossD_fake2 = loss_fn(output, labels)
         lossD_fake2.backward()
         optimizer_d.step()
