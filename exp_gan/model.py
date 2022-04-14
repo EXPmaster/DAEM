@@ -1,4 +1,4 @@
-__all__ = ['SurrogateModel', 'MitigateModel']
+__all__ = ['SurrogateModel', 'MitigateModel', 'Generator', 'Discriminator']
 
 import torch
 import torch.nn as nn
@@ -47,17 +47,41 @@ class MitigateModel(nn.Module):
 
 class Generator(nn.Module):
 
-    def __init__(self):
+    def __init__(self, num_layers, num_qubits):
         super().__init__()
-    
-    def forward(self, x):
-        ...
+        self.num_layers = num_layers
+        self.num_qubits = num_qubits
+        self.net = nn.Sequential(
+            nn.Linear(8, 128),
+            nn.Mish(inplace=True),
+            nn.Linear(128, 256),
+            nn.Mish(inplace=True),
+            nn.Linear(256, 16 * self.num_layers * self.num_qubits)
+        )
+
+    def forward(self, obs):
+        x = torch.cat((obs.real, obs.imag), -1).flatten(1)
+        x = self.net(x)
+        x = x.view(-1, self.num_layers, self.num_qubits, 16)
+        return torch.softmax(x, -1)
 
 
 class Discriminator(nn.Module):
 
     def __init__(self):
         super().__init__()
+        self.discriminator = nn.Sequential(
+            nn.Linear(9, 128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
     
-    def forward(self, x):
-        ...
+    def forward(self, meas_in, obs):
+        obs_cat = torch.cat((obs.real, obs.imag), -1).flatten(1)
+        x = torch.cat((meas_in, obs_cat), 1)
+        return self.discriminator(x)

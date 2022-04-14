@@ -21,15 +21,20 @@ def main(args):
                             {'params': model_s.parameters(), 'lr': 1e-6}], lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.02
+    best_metric = 0.003
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_s, loss_fn, optimizer)
         metric = validate(epoch, args, test_loader, model_g, model_s, loss_fn)
-        # if metric < best_metric:
-        #     print('Saving model...')
-        #     best_metric = metric
-        #     torch.save(model, os.path.join(args.logdir, 'best.pt'))
+        if metric < best_metric:
+            print('Saving model...')
+            best_metric = metric
+            ckpt = {
+                'model_g': model_g.state_dict(),
+                'model_s': model_s.state_dict(),
+                'optimizer': optimizer.state_dict()
+            }
+            torch.save(ckpt, os.path.join(args.logdir, 'mitigation_models.pt'))
 
 
 def train(epoch, args, loader, model_g, model_s, loss_fn, optimizer):
