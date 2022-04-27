@@ -39,7 +39,8 @@ class MitigateModel(nn.Module):
 
     def forward(self, obs, exp_noisy):
         obs_cat = torch.cat((obs.real, obs.imag), -1)
-        x = torch.cat((obs_cat.flatten(1), exp_noisy), 1)
+        # x = torch.cat((obs_cat.flatten(1), exp_noisy), 1)
+        x = obs_cat.flatten(1)
         x = self.net(x)
         x = x.view(-1, self.num_layers, self.num_qubits, 16)
         return torch.softmax(x, -1)

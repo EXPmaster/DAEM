@@ -16,12 +16,12 @@ def main(args):
     loss_fn = nn.MSELoss()
     model_s = SurrogateModel(dim_in=16 * args.num_layers * args.num_qubits + 8).to(args.device)
     model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
-    model_g = MitigateModel(num_layers=args.num_layers, num_qubits=args.num_qubits, dim_in=9).to(args.device)
+    model_g = MitigateModel(num_layers=args.num_layers, num_qubits=args.num_qubits, dim_in=8).to(args.device)
     optimizer = optim.Adam([{'params': model_g.parameters()},
                             {'params': model_s.parameters(), 'lr': 1e-6}], lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.003
+    best_metric = 0.000
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_s, loss_fn, optimizer)
@@ -34,7 +34,7 @@ def main(args):
                 'model_s': model_s.state_dict(),
                 'optimizer': optimizer.state_dict()
             }
-            torch.save(ckpt, os.path.join(args.logdir, 'mitigation_models.pt'))
+            torch.save(ckpt, os.path.join(args.logdir, 'mitigation_model.pt'))
 
 
 def train(epoch, args, loader, model_g, model_s, loss_fn, optimizer):

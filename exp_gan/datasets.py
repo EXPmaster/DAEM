@@ -80,6 +80,10 @@ def gen_fn(num_qubits, output_state, rho, num_samples):
     return data_list
 
 
+def gen_mitigation_data_ibmq(args):
+    ...
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/env1.pkl', type=str)

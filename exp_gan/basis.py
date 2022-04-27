@@ -38,6 +38,9 @@ class GatePi(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "Pi"
 
+    def __str__(self):
+        return 'GatePi'
+
 
 class GateS(cirq.Gate):
     def __init__(self):
@@ -51,6 +54,9 @@ class GateS(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "S"
+    
+    def __str__(self):
+        return 'GateS'
 
 
 class GateRX(cirq.Gate):
@@ -65,6 +71,9 @@ class GateRX(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "GRx"
+    
+    def __str__(self):
+        return 'GateRX'
 
 
 class GateRY(cirq.Gate):
@@ -79,6 +88,9 @@ class GateRY(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "GRy"
+    
+    def __str__(self):
+        return 'GateRY'
 
 
 class GateRZ(cirq.Gate):
@@ -93,6 +105,9 @@ class GateRZ(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "GRz"
+    
+    def __str__(self):
+        return 'GateRZ'
 
 
 class GateRYZ(cirq.Gate):
@@ -108,6 +123,9 @@ class GateRYZ(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "GRyz"
 
+    def __str__(self):
+        return 'GateRYZ'
+
 
 class GateRZX(cirq.Gate):
     def __init__(self):
@@ -121,6 +139,9 @@ class GateRZX(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "GRzx"
+
+    def __str__(self):
+        return 'GateRZX'
 
 
 class GateRXY(cirq.Gate):
@@ -136,6 +157,9 @@ class GateRXY(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "GRxy"
 
+    def __str__(self):
+        return 'GateRXY'
+
 
 class GatePiX(cirq.Gate):
     def __init__(self):
@@ -149,6 +173,9 @@ class GatePiX(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "PiX"
+    
+    def __str__(self):
+        return 'GatePiX'
 
 
 class GatePiY(cirq.Gate):
@@ -164,6 +191,9 @@ class GatePiY(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "PiY"
 
+    def __str__(self):
+        return 'GatePiY'
+
 
 class GatePiZ(cirq.Gate):
     def __init__(self):
@@ -177,6 +207,9 @@ class GatePiZ(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "PiZ"
+
+    def __str__(self):
+        return 'GatePiZ'
 
 
 class GatePiYZ(cirq.Gate):
@@ -192,6 +225,9 @@ class GatePiYZ(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "PiYZ"
 
+    def __str__(self):
+        return 'GatePiYZ'
+
 
 class GatePiZX(cirq.Gate):
     def __init__(self):
@@ -206,6 +242,9 @@ class GatePiZX(cirq.Gate):
     def _circuit_diagram_info_(self, args):
         return "PiZX"
 
+    def __str__(self):
+        return 'GatePiZX'
+
 
 class GatePiXY(cirq.Gate):
     def __init__(self):
@@ -219,6 +258,9 @@ class GatePiXY(cirq.Gate):
 
     def _circuit_diagram_info_(self, args):
         return "PiXY"
+
+    def __str__(self):
+        return 'GatePiXY'
 
 
 if __name__ == '__main__':

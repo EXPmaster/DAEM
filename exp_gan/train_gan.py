@@ -23,7 +23,7 @@ def main(args):
     optimizer_d = optim.Adam(model_d.parameters(), lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.003
+    best_metric = 0.015
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_s, model_d, loss_fn, optimizer_g, optimizer_d)
@@ -34,7 +34,8 @@ def main(args):
             ckpt = {
                 'model_g': model_g.state_dict(),
                 'model_s': model_s.state_dict(),
-                'optimizer': optimizer.state_dict()
+                'optimizer_g': optimizer_g.state_dict(),
+                'optimizer_d': optimizer_d.state_dict()
             }
             torch.save(ckpt, os.path.join(args.logdir, 'gan_model.pt'))
 
@@ -114,7 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--num-layers', default=8, type=int, help='depth of the circuit')
     parser.add_argument('--num-qubits', default=5, type=int, help='number of qubits')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
-    parser.add_argument('--epochs', default=200, type=int)
+    parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
     args = parser.parse_args()

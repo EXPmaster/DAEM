@@ -1,16 +1,18 @@
 import torch
-from exp_torch.dataset import QuantumDataset
+import sys
+sys.path.append('exp_gan')
+from exp_gan.datasets import MitigateDataset
 from exp_torch.utils import AverageMeter
 
 
 if __name__ == '__main__':
-    data_path = 'data2/dataset_0.pkl'
-    dataset = QuantumDataset(data_path)
+    data_path = 'data_mitigate/testset_1.pkl'
+    dataset = MitigateDataset(data_path)
     print(len(dataset))
 
     deviation = AverageMeter()
-    for _, _, _, _, _, _, delta in dataset:
-        deviation.update(torch.abs(delta).item())
+    for obs, exp_noisy, exp_ideal in dataset:
+        deviation.update(torch.abs(exp_noisy - exp_ideal).item())
 
     print('deviation in original dataset: {:.6f}'.format(deviation.getval()))
     
