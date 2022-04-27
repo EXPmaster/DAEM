@@ -14,7 +14,7 @@ The following circuit is random generated and is used to train the mitigation mo
 
 A mitigation gate (denoted by $\mathbf{P}$) is inserted before and after each gate. Each mitigation gate is one of 16 basis operations sampled from a distribution.
 
-<img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/basis_ops.png" alt="img" style="zoom:50%;" /> 
+<img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/basis_ops.png" alt="img" style="zoom: 35%;" /> 
 
 Depolarizing noise is applied after each single qubit gate, two-qubit gate and mitigation gate:
 $$
@@ -36,17 +36,17 @@ The generator model is used to generate a probability distribution of 16 basis o
 
 * Surrogate model
 
-  ![img](https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/surrogate_model.png)
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/surrogate_model.png" alt="img" style="zoom:30%;" />
 
 * Generator model
 
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/generator.png" alt="img" style="zoom:50%;" />
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/generator.png" alt="img" style="zoom:30%;" />
 
 * GAN
 
   * We need an additional discriminator model, which output the probability of  the input measurement result being noise-free.
 
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/discriminator.png" alt="img" style="zoom:50%;" />
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/discriminator.png" alt="img" style="zoom:30%;" />
 
 
 
