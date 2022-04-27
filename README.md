@@ -36,17 +36,17 @@ The generator model is used to generate a probability distribution of 16 basis o
 
 * Surrogate model
 
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/surrogate_model.png" alt="img" style="zoom:10%;" />
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/surrogate_model.png" alt="img" width=200 height=100 align=center />
 
 * Generator model
 
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/generator.png" alt="img" style="zoom:10%;" />
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/generator.png" alt="img" width=200 height=100 align=center />
 
 * GAN
 
   * We need an additional discriminator model, which output the probability of  the input measurement result being noise-free.
 
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/discriminator.png" alt="img" style="zoom:10%;" />
+  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/discriminator.png" alt="img" width=250 height=100 align=center />
 
 
 
