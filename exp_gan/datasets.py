@@ -1,12 +1,13 @@
 import argparse
 import pickle
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 import numpy as np
 import pathos
 import cirq
 
-from my_envs import QCircuitEnv
+from my_envs import QCircuitEnv, IBMQEnv, stable_softmax
 
 
 class SurrogateDataset(Dataset):
@@ -25,6 +26,32 @@ class SurrogateDataset(Dataset):
 
     def __len__(self):
         return len(self.probabilities)
+
+
+class SurrogateGenerator:
+
+    def __init__(self, env_path, batch_size, itrs=10000):
+        self.env = IBMQEnv.load(env_path)
+        self.num_miti_gates = self.env.count_mitigate_gates()
+        self.batch_size = batch_size
+        self.itrs = itrs
+        self.cur_itr = 0
+
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.cur_itr < self.itrs:
+            rand_val = torch.randn((self.batch_size, self.num_miti_gates, 4))
+            prs = F.softmax(rand_val, dim=-1)
+            rand_matrix = torch.randn((self.batch_size, 2, 2), dtype=torch.cfloat)
+            obs = torch.bmm(rand_matrix.conj().transpose(-2, -1), rand_matrix)
+            meas = self.env.step(obs.numpy(), prs.numpy())
+            self.cur_itr += 1
+            return prs, obs, torch.FloatTensor(meas)
+        else:
+            self.cur_itr = 0
+            raise StopIteration
 
 
 class MitigateDataset(Dataset):
@@ -80,16 +107,15 @@ def gen_fn(num_qubits, output_state, rho, num_samples):
     return data_list
 
 
-def gen_mitigation_data_ibmq(args):
-    ...
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-path', default='../environments/env1.pkl', type=str)
+    parser.add_argument('--env-path', default='../environments/ibmq1.pkl', type=str)
     parser.add_argument('--out-path', default='../data_mitigate/env1_mitigate.pkl', type=str)
     parser.add_argument('--num-data', default=100_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
     # print(next(iter(dataset)))
-    gen_mitigation_data(args)
+    # gen_mitigation_data(args)
+    dataset = SurrogateGenerator(args.env_path, batch_size=16, itrs=10)
+    for data in dataset:
+        print(data)

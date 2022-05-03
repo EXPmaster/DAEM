@@ -1,6 +1,8 @@
 import pickle
 import pathos
 import numpy as np
+from tqdm import tqdm
+
 import cirq
 import cirq.ops as ops
 from cirq.circuits import InsertStrategy
@@ -9,9 +11,8 @@ from qiskit import IBMQ, Aer, QuantumCircuit, transpile, execute
 from qiskit.providers.aer import AerSimulator
 import qiskit.opflow as opflow
 from qiskit.providers.aer.noise import NoiseModel
-from qiskit.converters import circuit_to_dag
-from qiskit.transpiler import TransformationPass
 
+from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex
 from utils import AverageMeter, ConfigDict
 from basis import *
 
@@ -129,6 +130,7 @@ class IBMQEnv:
             pkl_file = kwargs['pkl_file']
             self.config = pkl_file['config']
             self.circuit = pkl_file['circuit']
+            self.state_table = pkl_file['state_table']
         else:
             assert args is not None, 'Arguments must be provided.'
             self.config = ConfigDict(
@@ -137,15 +139,17 @@ class IBMQEnv:
                 backend=args.backend
             )
             self.circuit = self._gen_new_circuit()
-        IBMQ.load_account()
-        provider = IBMQ.get_provider(
-            hub='ibm-q',
-            group='open',
-            project='main'
-        )
-        self.backend = provider.get_backend(self.config.backend)
-        # self.backend = AerSimulator.from_backend(backend)
-        self.transformer = TransformCirc(self.config.num_qubits)
+            IBMQ.load_account()
+            provider = IBMQ.get_provider(
+                hub='ibm-q',
+                group='open',
+                project='main'
+            )
+            backend = provider.get_backend(self.config.backend)
+            self.backend = AerSimulator.from_backend(backend)
+            self.state_table = self.build_state_table()
+
+        self.transformer = TransformCircWithPr(self.config.num_qubits)
         print(self.circuit)
 
     @staticmethod
@@ -169,14 +173,57 @@ class IBMQEnv:
         circ.measure(0, 0)
         return circ
 
+    def count_mitigate_gates(self):
+        num = 0
+        for item in self.circuit:
+            num += item[0].name == 'id'
+        return num
+
+    def build_state_table(self, shots_per_sim=2000):
+        print('Building look up table...')
+        tsfm = TransformCircWithIndex()
+        num_identity = self.count_mitigate_gates()
+        table_size = len(self.transformer.basis_ops) ** num_identity
+        lut = []
+        for i in tqdm(range(table_size)):
+            circuit = tsfm(self.circuit, i)
+            t_circuit = transpile(circuit, self.backend)
+            result_noisy = self.backend.run(t_circuit, shots=shots_per_sim).result()
+            counts = result_noisy.get_counts()
+            lut.append(self.state_vector(counts, shots=shots_per_sim))
+        return np.stack(lut)
+
+    @staticmethod
+    def state_vector(counts, shots):
+        probs = {'0': 0, '1': 0}
+        for output in ['0', '1']:
+            if output in counts:
+                probs[output] = counts[output] / shots
+            else:
+                probs[output] = 0
+        return np.sqrt(np.array([probs['0'], probs['1']]))
+
     def _modify_circuit(self, p):
         return self.transformer(self.circuit, p)
 
-    def step(self, obs_batch, p_batch, nums=10000):
-        if len(p_batch.shape) == 4:
-            return np.array([self._get_mean_val(obs, p, nums) for obs, p in zip(obs_batch, p_batch)])
-        else:
-            return self._get_mean_val(obs_batch, p_batch, nums)
+    def step(self, obs_batch, p_batch, nums=1000):
+        # if len(p_batch.shape) == 4:
+        #     return np.array([self._get_mean_val(obs, p, nums) for obs, p in zip(obs_batch, p_batch)])
+        # else:
+        #     return self._get_mean_val(obs_batch, p_batch, nums)
+        cum_p_batch = np.cumsum(p_batch, -1)
+        batch_size = len(p_batch)
+        results = []
+        for i in range(nums):
+            u = np.random.rand(batch_size, 1, 1)
+            choice_idx = (u < cum_p_batch).argmax(-1).reshape(batch_size, -1)
+            idx_str = np.char.mod('%d', choice_idx)
+            code_idx = [''.join(item) for item in idx_str]
+            idx = [int(c, 4) for c in code_idx]
+            selected_state_vec = self.state_table[idx]
+            meas_results = (selected_state_vec[:, None, :] @ obs_batch @ selected_state_vec[:, :, None]).squeeze(-1).real
+            results.append(meas_results)
+        return np.mean(results, 0)
     
     @staticmethod
     def measure_z(counts, shots):
@@ -193,20 +240,13 @@ class IBMQEnv:
     @staticmethod
     def measure_obs(counts, obs, shots):
         """measure a specific observable"""
-        probs = {'0': 0, '1': 0}
-        for output in ['0', '1']:
-            if output in counts:
-                probs[output] = counts[output] / shots
-            else:
-                probs[output] = 0
-        state_vec = np.array([[np.sqrt(probs['0'])], [np.sqrt(probs['1'])]])
-        return (state_vec.T @ obs @ state_vec)[0][0]
+        state_vec = self.state_vector(counts, shots)
+        return state_vec @ obs @ state_vec
 
     def _apply_step(self, obs, p):
         circuit = self._modify_circuit(p)
-        backend = AerSimulator.from_backend(self.backend)
-        t_circuit = transpile(circuit, backend)
-        result_noisy = backend.run(t_circuit, shots=1).result()
+        t_circuit = transpile(circuit, self.backend)
+        result_noisy = self.backend.run(t_circuit, shots=1).result()
         counts = result_noisy.get_counts()
         return self.measure_obs(counts, obs, shots=1)
         
@@ -222,7 +262,7 @@ class IBMQEnv:
         return sum_val / nums
 
     def save(self, path):
-        save_data = dict(config=self.config, circuit=self.circuit)
+        save_data = dict(config=self.config, circuit=self.circuit, state_table=self.state_table)
         with open(path, 'wb') as f:
             pickle.dump(save_data, f)
         print(f'Environment saved at {path}.')
@@ -235,64 +275,6 @@ class IBMQEnv:
         return cls(pkl_file=data)
 
 
-class TransformCirc(TransformationPass):
-
-    def __init__(self, num_qubits):
-        super().__init__()
-        self.basis_ops = [
-            ops.I, ops.X, ops.Y, ops.Z,
-            # GateRX(), GateRY(), GateRZ(), GateRYZ(),
-            # GateRZX(), GateRXY(), GatePiX(), GatePiY(),
-            # GatePiZ(), GatePiYZ(), GatePiZX(), GatePiXY()
-        ]
-        self.num_qubits = num_qubits
-
-    def run(self, dag, p):
-        """Run the pass."""
-        idx = 0
-        # iterate over all operations
-        for node in dag.op_nodes():
-            # if we hit a RYY or RZZ gate replace it
-            if node.op.name == 'id':
-                cur_pr = p[idx // self.num_qubits, idx % self.num_qubits, :].ravel()
-                gate = np.random.choice(self.basis_ops, p=cur_pr)
-                # calculate the replacement
-                replacement = QuantumCircuit(1)
-                replacement.unitary(cirq.unitary(gate), 0, label=str(gate))
-
-                # replace the node with our new decomposition
-                dag.substitute_node_with_dag(node, circuit_to_dag(replacement))
-                idx += 1
-
-        return dag
-    
-    def __call__(self, circuit, p, property_set=None):
-        from qiskit.converters import circuit_to_dag, dag_to_circuit
-        from qiskit.dagcircuit.dagcircuit import DAGCircuit
-
-        result = self.run(circuit_to_dag(circuit), p)
-
-        result_circuit = circuit
-
-        if isinstance(property_set, dict):  # this includes (dict, PropertySet)
-            property_set.clear()
-            property_set.update(self.property_set)
-
-        if isinstance(result, DAGCircuit):
-            result_circuit = dag_to_circuit(result)
-        elif result is None:
-            result_circuit = circuit.copy()
-
-        if self.property_set["layout"]:
-            result_circuit._layout = self.property_set["layout"]
-        if self.property_set["clbit_write_latency"] is not None:
-            result_circuit._clbit_write_latency = self.property_set["clbit_write_latency"]
-        if self.property_set["conditional_latency"] is not None:
-            result_circuit._conditional_latency = self.property_set["conditional_latency"]
-
-        return result_circuit
-
-
 def stable_softmax(x):
     maxval = x.max(-1, keepdims=True)
     x_exp = np.exp(x - maxval)
@@ -302,9 +284,9 @@ def stable_softmax(x):
 def main(args):
     env = IBMQEnv.load(args.env_path)
     print('Start.')
-    rand_val = np.random.randn(args.data_num, args.num_layers, args.num_qubits, 4)
+    rand_val = np.random.randn(args.data_num, env.count_mitigate_gates(), 4)
     pr = stable_softmax(rand_val)
-    observable = [cirq.unitary(cirq.Z)] * args.data_num
+    observable = np.stack([cirq.unitary(cirq.Z)] * args.data_num)
     
     results = env.step(observable, pr, nums=1000)
     print(results)
@@ -327,10 +309,10 @@ if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     
     ArgsClass = namedtuple('args', ['num_layers', 'num_qubits', 'backend', 'env_path', 'data_num'])
-    args = ArgsClass(8, 5, 'ibmq_santiago', '../environments/ibmq1.pkl', 1)
+    args = ArgsClass(8, 2, 'ibmq_santiago', '../environments/ibmq1.pkl', 16)
     # print(args)
     # env = IBMQEnv(args)
-    # env.save('../environments/ibmq1.pkl')
+    # env.save(args.env_path)
     main(args)
     # print(env.circuit)
     

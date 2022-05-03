@@ -8,27 +8,27 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import *
 from utils import AverageMeter, build_dataloader, abs_deviation
-from datasets import SurrogateDataset
+from datasets import SurrogateGenerator
 
 
 def main(args):
-    trainset, testset, train_loader, test_loader = build_dataloader(args, SurrogateDataset)
+    loader = SurrogateGenerator(args.env_path, args.batch_size)
     loss_fn = nn.MSELoss()
     print(f'Model type: {args.model_type}.')
-    model = SurrogateModel(dim_in=16 * args.num_layers * args.num_qubits + 8).to(args.device)
+    model = SurrogateModel(dim_in=4 * loader.num_miti_gates + 8).to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print('Start training...')
 
     best_metric = 0.02
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
-        train(epoch, args, train_loader, model, loss_fn, optimizer)
-        metric = validate(epoch, args, test_loader, model, loss_fn)
+        train(epoch, args, loader, model, loss_fn, optimizer)
+        metric = validate(epoch, args, loader, model, loss_fn)
 
         if metric < best_metric:
             print('Saving model...')
             best_metric = metric
-            torch.save(model.state_dict(), os.path.join(args.logdir, 'best.pt'))
+            torch.save(model.state_dict(), os.path.join(args.logdir, 'model_surrogate.pt'))
 
 
 def train(epoch, args, loader, model, loss_fn, optimizer):
@@ -65,9 +65,10 @@ def validate(epoch, args, loader, model, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-path', default='../data_surrogate/env1_data.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_surrogate/env1_data.pkl', type=str)
-    parser.add_argument('--logdir', default='../runs/env1', type=str, help='path to save logs and models')
+    # parser.add_argument('--train-path', default='../data_surrogate/env1_data.pkl', type=str)
+    # parser.add_argument('--test-path', default='../data_surrogate/env1_data.pkl', type=str)
+    parser.add_argument('--env-path', default='../environments/ibmq1.pkl', type=str)
+    parser.add_argument('--logdir', default='../runs/env_ibmq', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=32, type=int)
     parser.add_argument('--num-layers', default=8, type=int, help='depth of the circuit')
