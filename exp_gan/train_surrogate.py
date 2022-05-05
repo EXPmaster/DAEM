@@ -19,7 +19,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.02
+    best_metric = 0.075
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, loader, model, loss_fn, optimizer)
@@ -51,6 +51,7 @@ def train(epoch, args, loader, model, loss_fn, optimizer):
 def validate(epoch, args, loader, model, loss_fn):
     model.eval()
     metric = AverageMeter()
+    loader.cur_itr = 30
     for itr,(prs, obs, gts) in enumerate(loader):
         prs, obs, gts = prs.to(args.device), obs.to(args.device), gts.to(args.device)
         predicts = model(prs, obs)
@@ -70,11 +71,11 @@ if __name__ == '__main__':
     parser.add_argument('--env-path', default='../environments/ibmq1.pkl', type=str)
     parser.add_argument('--logdir', default='../runs/env_ibmq', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
-    parser.add_argument('--batch-size', default=32, type=int)
+    parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-layers', default=8, type=int, help='depth of the circuit')
     parser.add_argument('--num-qubits', default=5, type=int, help='number of qubits')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
     args = parser.parse_args()

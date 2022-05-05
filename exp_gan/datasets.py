@@ -30,7 +30,7 @@ class SurrogateDataset(Dataset):
 
 class SurrogateGenerator:
 
-    def __init__(self, env_path, batch_size, itrs=10000):
+    def __init__(self, env_path, batch_size, itrs=50):
         self.env = IBMQEnv.load(env_path)
         self.num_miti_gates = self.env.count_mitigate_gates()
         self.batch_size = batch_size
@@ -42,11 +42,11 @@ class SurrogateGenerator:
     
     def __next__(self):
         if self.cur_itr < self.itrs:
-            rand_val = torch.randn((self.batch_size, self.num_miti_gates, 4))
+            rand_val = torch.rand((self.batch_size, self.num_miti_gates, 4))
             prs = F.softmax(rand_val, dim=-1)
             rand_matrix = torch.randn((self.batch_size, 2, 2), dtype=torch.cfloat)
             obs = torch.bmm(rand_matrix.conj().transpose(-2, -1), rand_matrix)
-            meas = self.env.step(obs.numpy(), prs.numpy())
+            meas = self.env.step(obs.numpy(), prs.numpy(), nums=10000)
             self.cur_itr += 1
             return prs, obs, torch.FloatTensor(meas)
         else:

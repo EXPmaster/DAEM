@@ -213,17 +213,23 @@ class IBMQEnv:
         #     return self._get_mean_val(obs_batch, p_batch, nums)
         cum_p_batch = np.cumsum(p_batch, -1)
         batch_size = len(p_batch)
-        results = []
-        for i in range(nums):
-            u = np.random.rand(batch_size, 1, 1)
-            choice_idx = (u < cum_p_batch).argmax(-1).reshape(batch_size, -1)
-            idx_str = np.char.mod('%d', choice_idx)
-            code_idx = [''.join(item) for item in idx_str]
-            idx = [int(c, 4) for c in code_idx]
-            selected_state_vec = self.state_table[idx]
-            meas_results = (selected_state_vec[:, None, :] @ obs_batch @ selected_state_vec[:, :, None]).squeeze(-1).real
-            results.append(meas_results)
-        return np.mean(results, 0)
+        # results = []
+        # for i in range(nums):
+        #     u = np.random.rand(batch_size, p_batch.shape[1], 1)
+        #     choice_idx = (u < cum_p_batch).argmax(-1).reshape(batch_size, -1)
+        #     idx_str = np.char.mod('%d', choice_idx)
+        #     idx = np.apply_along_axis(_map_fn, 1, idx_str)
+        #     selected_state_vec = self.state_table[idx]
+        #     meas_results = (selected_state_vec[:, None, :] @ obs_batch @ selected_state_vec[:, :, None]).squeeze(-1).real
+        #     results.append(meas_results)
+        # return np.mean(results, 0)
+        u = np.random.rand(nums, batch_size, p_batch.shape[1], 1)
+        choice_idx = (u < cum_p_batch[None]).argmax(-1).reshape(nums, batch_size, -1)
+        idx_str = np.char.mod('%d', choice_idx)
+        idx = np.apply_along_axis(_map_fn, -1, idx_str)
+        selected_state_vec = self.state_table[idx]
+        meas_results = (selected_state_vec[:, :, None, :] @ obs_batch @ selected_state_vec[:, :, :, None]).squeeze(-1).real
+        return np.mean(meas_results, 0)
     
     @staticmethod
     def measure_z(counts, shots):
@@ -279,6 +285,11 @@ def stable_softmax(x):
     maxval = x.max(-1, keepdims=True)
     x_exp = np.exp(x - maxval)
     return x_exp / x_exp.sum(-1, keepdims=True)
+
+
+def _map_fn(arr):
+    string = ''.join(arr)
+    return int(string, 4)
 
 
 def main(args):

@@ -10,11 +10,11 @@ class SurrogateModel(nn.Module):
     def __init__(self, dim_in):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(dim_in, 1024),
+            nn.Linear(dim_in, 256),
             nn.Mish(inplace=True),
-            nn.Linear(1024, 1024),
+            nn.Linear(256, 256),
             nn.Mish(inplace=True),
-            nn.Linear(1024, 1)
+            nn.Linear(256, 1)
         )
 
     def forward(self, prs, obs):
@@ -57,13 +57,13 @@ class Generator(nn.Module):
             nn.Mish(inplace=True),
             nn.Linear(128, 256),
             nn.Mish(inplace=True),
-            nn.Linear(256, 16 * self.num_layers * self.num_qubits)
+            nn.Linear(256, 4 * self.num_layers * self.num_qubits)
         )
 
     def forward(self, obs):
         x = torch.cat((obs.real, obs.imag), -1).flatten(1)
         x = self.net(x)
-        x = x.view(-1, self.num_layers, self.num_qubits, 16)
+        x = x.view(-1, self.num_layers, self.num_qubits, 4)
         return torch.softmax(x, -1)
 
 
