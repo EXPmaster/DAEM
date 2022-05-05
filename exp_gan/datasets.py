@@ -107,15 +107,38 @@ def gen_fn(num_qubits, output_state, rho, num_samples):
     return data_list
 
 
+def gen_mitigation_data_ibmq(args):
+    env = IBMQEnv.load(args.env_path)
+    env.gen_new_circuit_without_id()
+    print(env.circuit)
+    ideal_state = env.simulate_ideal()
+    noisy_state = env.simulate_noisy()
+    print(ideal_state)
+    print(noisy_state)
+    dataset = []
+    for i in range(args.num_data):
+        rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
+        rand_obs = rand_matrix.conj().T @ rand_matrix
+        # rand_obs = np.diag([1., -1])
+        obs = np.kron(np.eye(2), rand_obs)
+        exp_ideal = ideal_state.expectation_value(obs).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
+        exp_noisy = noisy_state.expectation_value(obs).real
+        dataset.append([rand_obs, round(exp_noisy, 8), round(exp_ideal, 8)])
+
+    with open(args.out_path, 'wb') as f:
+        pickle.dump(dataset, f)
+    print(f'Generation finished. File saved to {args.out_path}')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/ibmq1.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/env1_mitigate.pkl', type=str)
-    parser.add_argument('--num-data', default=100_000, type=int)
+    parser.add_argument('--out-path', default='../data_mitigate/ibmq1_mitigate.pkl', type=str)
+    parser.add_argument('--num-data', default=200_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
     # print(next(iter(dataset)))
-    # gen_mitigation_data(args)
-    dataset = SurrogateGenerator(args.env_path, batch_size=16, itrs=10)
-    for data in dataset:
-        print(data)
+    # dataset = SurrogateGenerator(args.env_path, batch_size=16, itrs=10)
+    # for data in dataset:
+    #     print(data)
+    gen_mitigation_data_ibmq(args)

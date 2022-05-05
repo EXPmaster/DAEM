@@ -139,6 +139,7 @@ class IBMQEnv:
                 backend=args.backend
             )
             self.circuit = self._gen_new_circuit()
+
             IBMQ.load_account()
             provider = IBMQ.get_provider(
                 hub='ibm-q',
@@ -172,6 +173,19 @@ class IBMQEnv:
         circ.barrier()
         circ.measure(0, 0)
         return circ
+
+    def gen_new_circuit_without_id(self):
+        circ = QuantumCircuit(2, 1)
+        circ.h(0)
+        circ.h(1)
+        circ.cx(0, 1)
+        circ.rz(np.pi/3, 1)
+        circ.cx(0, 1)
+        circ.h(0)
+        circ.barrier()
+        # circ.measure(0, 0)
+        # circ.save_density_matrix()
+        self.circuit = circ
 
     def count_mitigate_gates(self):
         num = 0
@@ -230,6 +244,30 @@ class IBMQEnv:
         selected_state_vec = self.state_table[idx]
         meas_results = (selected_state_vec[:, :, None, :] @ obs_batch @ selected_state_vec[:, :, :, None]).squeeze(-1).real
         return np.mean(meas_results, 0)
+
+    def simulate_ideal(self, shots=1):
+        circuit = self.circuit.copy()
+        circuit.save_statevector()
+        backend = Aer.get_backend('aer_simulator')
+        results = backend.run(circuit, shots=shots).result()
+        # counts = results.get_counts()
+        # return self.state_vector(counts, shots)
+        return results.get_statevector(circuit)
+
+    def simulate_noisy(self, shots=10000):
+        IBMQ.load_account()
+        provider = IBMQ.get_provider(
+            hub='ibm-q',
+            group='open',
+            project='main'
+        )
+        backend = provider.get_backend(self.config.backend)
+        backend = AerSimulator.from_backend(backend)
+        circuit = self.circuit.copy()
+        circuit.save_density_matrix()
+        t_circuit = transpile(circuit, backend)
+        results = backend.run(t_circuit, shots=shots).result()
+        return results.data()['density_matrix']
     
     @staticmethod
     def measure_z(counts, shots):
