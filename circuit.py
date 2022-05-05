@@ -190,7 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--threshold', default=0.005, type=float, help='keep data for exp_ideal >= threshold')
     parser.add_argument('--num-workers', default=16, type=int, help='the number of processes used in generating data')
     parser.add_argument('--save-dir', default='./data_mitigate', type=str)
-    parser.add_argument('--data-name', default='env1_mitigate.pkl', type=str)
+    parser.add_argument('--data-name', default='ibmq1_mitigate.pkl', type=str)
     parser.add_argument('--train-name', default='trainset_1.pkl', type=str)
     parser.add_argument('--test-name', default='testset_1.pkl', type=str)
     parser.add_argument('--generate', default=False, action='store_true', help='whether or not generate new data')

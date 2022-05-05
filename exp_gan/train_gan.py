@@ -14,7 +14,7 @@ from datasets import MitigateDataset
 def main(args):
     trainset, testset, train_loader, test_loader = build_dataloader(args, MitigateDataset)
     loss_fn = nn.BCELoss()
-    model_s = SurrogateModel(dim_in=16 * args.num_layers * args.num_qubits + 8).to(args.device)
+    model_s = SurrogateModel(dim_in=4 * args.num_layers * args.num_qubits + 8).to(args.device)
     model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
     model_g = Generator(num_layers=args.num_layers, num_qubits=args.num_qubits).to(args.device)
     model_d = Discriminator().to(args.device)
@@ -34,6 +34,7 @@ def main(args):
             ckpt = {
                 'model_g': model_g.state_dict(),
                 'model_s': model_s.state_dict(),
+                'model_d': model_d.state_dict(),
                 'optimizer_g': optimizer_g.state_dict(),
                 'optimizer_d': optimizer_d.state_dict()
             }
@@ -108,12 +109,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--train-path', default='../data_mitigate/trainset_1.pkl', type=str)
     parser.add_argument('--test-path', default='../data_mitigate/testset_1.pkl', type=str)
-    parser.add_argument('--weight-path', default='../runs/env1/best.pt', type=str)
-    parser.add_argument('--logdir', default='../runs/env1', type=str, help='path to save logs and models')
+    parser.add_argument('--weight-path', default='../runs/env_ibmq/model_surrogate1.pt', type=str)
+    parser.add_argument('--logdir', default='../runs/env_ibmq', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--num-layers', default=8, type=int, help='depth of the circuit')
-    parser.add_argument('--num-qubits', default=5, type=int, help='number of qubits')
+    parser.add_argument('--num-layers', default=4, type=int, help='depth of the circuit')
+    parser.add_argument('--num-qubits', default=2, type=int, help='number of qubits')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
     parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--gpus', default='0', type=str)
