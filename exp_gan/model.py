@@ -34,7 +34,7 @@ class MitigateModel(nn.Module):
             nn.Mish(inplace=True),
             nn.Linear(128, 256),
             nn.Mish(inplace=True),
-            nn.Linear(256, 16 * self.num_layers * self.num_qubits)
+            nn.Linear(256, 4 * self.num_layers * self.num_qubits)
         )
 
     def forward(self, obs, exp_noisy):
@@ -42,7 +42,7 @@ class MitigateModel(nn.Module):
         # x = torch.cat((obs_cat.flatten(1), exp_noisy), 1)
         x = obs_cat.flatten(1)
         x = self.net(x)
-        x = x.view(-1, self.num_layers, self.num_qubits, 16)
+        x = x.view(-1, self.num_layers * self.num_qubits, 4)
         return torch.softmax(x, -1)
 
 

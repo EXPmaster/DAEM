@@ -15,6 +15,7 @@ from qiskit.providers.aer.noise import NoiseModel
 from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex
 from utils import AverageMeter, ConfigDict
 from basis import *
+from circuit_lib import *
 
 
 class QCircuitEnv:
@@ -151,7 +152,7 @@ class IBMQEnv:
             self.state_table = self.build_state_table()
 
         self.transformer = TransformCircWithPr(self.config.num_qubits)
-        print(self.circuit)
+        # print(self.circuit)
 
     @staticmethod
     def _gen_new_circuit():
@@ -175,17 +176,31 @@ class IBMQEnv:
         return circ
 
     def gen_new_circuit_without_id(self):
-        circ = QuantumCircuit(2, 1)
-        circ.h(0)
-        circ.h(1)
-        circ.cx(0, 1)
-        circ.rz(np.pi/3, 1)
-        circ.cx(0, 1)
-        circ.h(0)
-        circ.barrier()
-        # circ.measure(0, 0)
-        # circ.save_density_matrix()
-        self.circuit = circ
+        # circ = QuantumCircuit(2)
+        # circ.h(0)
+        # circ.h(1)
+        # circ.cx(0, 1)
+        # circ.rz(np.pi/3, 1)
+        # circ.cx(0, 1)
+        # circ.h(0)
+        # # circ.barrier()
+        # # circ.measure(0, 0)
+        # # circ.save_density_matrix()
+        # # circ = swaptest().decompose().decompose()
+        qc = QuantumCircuit(2)
+
+        # CDR works better if the circuit is not too short. So we increase its depth.
+        for i in range(5): 
+            qc.h(0) # Clifford
+            qc.h(1) # Clifford
+            qc.rz(1.75, 0)
+            qc.rz(2.31, 1)
+            qc.cx(0,1) # Clifford
+            qc.rz(-1.17, 1)
+            qc.rz(3.23, 0)
+            qc.rx(np.pi/2, 0) # Clifford
+            qc.rx(np.pi/2, 1) # Clifford
+        self.circuit = qc
 
     def count_mitigate_gates(self):
         num = 0
@@ -281,8 +296,7 @@ class IBMQEnv:
         measure = probs['0'] - probs['1']
         return measure
 
-    @staticmethod
-    def measure_obs(counts, obs, shots):
+    def measure_obs(self, counts, obs, shots):
         """measure a specific observable"""
         state_vec = self.state_vector(counts, shots)
         return state_vec @ obs @ state_vec

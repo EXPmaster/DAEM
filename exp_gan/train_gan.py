@@ -116,7 +116,7 @@ if __name__ == '__main__':
     parser.add_argument('--num-layers', default=4, type=int, help='depth of the circuit')
     parser.add_argument('--num-qubits', default=2, type=int, help='number of qubits')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
-    parser.add_argument('--epochs', default=1000, type=int)
+    parser.add_argument('--epochs', default=500, type=int)
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
     args = parser.parse_args()

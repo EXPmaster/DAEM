@@ -3,3 +3,5 @@ tensorboard==2.0.0
 torchsummary
 pathos
 qiskit
+mitiq
+pylatexenc
