@@ -80,10 +80,11 @@ def benchmark_cdr():
         mitigated_measurement = cdr.execute_with_cdr(
             circuit,
             partial(executor, obs=obs, shots=shots),
-            num_training_circuits=20,
+            num_training_circuits=80,
             simulator=partial(sim, obs=obs, shots=shots),
             seed=0,
-            fit_function=cdr.linear_fit_function_no_intercept
+            fraction_non_clifford=0.4
+            # fit_function=cdr.linear_fit_function_no_intercept
         ).real
         array.append(abs(expectation_ideal - mitigated_measurement))
         print(expectation_ideal)
@@ -154,5 +155,5 @@ if __name__ == '__main__':
     with open('../data_mitigate/testset_1.pkl', 'rb') as f:
         dataset = pickle.load(f)
 
-    benchmark_zne()
-    # benchmark_cdr()
+    # benchmark_zne()
+    benchmark_cdr()

@@ -1,9 +1,11 @@
 import cirq
 import cirq.ops as ops
 import numpy as np
-from qiskit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
-from qiskit.transpiler import TransformationPass
+from qiskit import QuantumCircuit, QuantumRegister
+from qiskit.converters import circuit_to_dag, dag_to_circuit
+from qiskit.transpiler import TransformationPass, Layout
+from qiskit.dagcircuit.dagcircuit import DAGCircuit
+from qiskit.circuit.library import IGate, XGate, YGate, ZGate
 
 
 class TransformCircWithPr(TransformationPass):
@@ -38,9 +40,6 @@ class TransformCircWithPr(TransformationPass):
         return dag
     
     def __call__(self, circuit, p, property_set=None):
-        from qiskit.converters import circuit_to_dag, dag_to_circuit
-        from qiskit.dagcircuit.dagcircuit import DAGCircuit
-
         result = self.run(circuit_to_dag(circuit), p)
 
         result_circuit = circuit
@@ -69,7 +68,8 @@ class TransformCircWithIndex(TransformationPass):
     def __init__(self):
         super().__init__()
         self.basis_ops = [
-            ops.I, ops.X, ops.Y, ops.Z,
+            IGate(), XGate(), YGate(), ZGate()
+            # ops.I, ops.X, ops.Y, ops.Z,
             # GateRX(), GateRY(), GateRZ(), GateRYZ(),
             # GateRZX(), GateRXY(), GatePiX(), GatePiY(),
             # GatePiZ(), GatePiYZ(), GatePiZX(), GatePiXY()
@@ -84,8 +84,9 @@ class TransformCircWithIndex(TransformationPass):
                 cur_idx = idx % len(self.basis_ops)
                 gate = self.basis_ops[cur_idx]
                 # calculate the replacement
-                replacement = QuantumCircuit(1)
-                replacement.unitary(cirq.unitary(gate), 0, label=str(gate))
+                qr = QuantumRegister(1)
+                replacement = QuantumCircuit(qr)
+                replacement.append(gate, qr)
 
                 # replace the node with our new decomposition
                 dag.substitute_node_with_dag(node, circuit_to_dag(replacement))
@@ -94,9 +95,6 @@ class TransformCircWithIndex(TransformationPass):
         return dag
     
     def __call__(self, circuit, idx, property_set=None):
-        from qiskit.converters import circuit_to_dag, dag_to_circuit
-        from qiskit.dagcircuit.dagcircuit import DAGCircuit
-
         result = self.run(circuit_to_dag(circuit), idx)
 
         result_circuit = circuit
@@ -118,3 +116,52 @@ class TransformCircWithIndex(TransformationPass):
             result_circuit._conditional_latency = self.property_set["conditional_latency"]
 
         return result_circuit
+
+
+def add_miti_gates_to_circuit(circuit):
+    dag = circuit_to_dag(circuit)
+    new_dag = DAGCircuit()
+    for qreg in dag.qregs.values():
+        new_dag.add_qreg(qreg)
+    for creg in dag.cregs.values():
+        new_dag.add_creg(creg)
+
+    canonical_register = dag.qregs['q']
+    trivial_layout = Layout.generate_trivial_layout(canonical_register)
+    current_layout = trivial_layout.copy()
+    order = current_layout.reorder_bits(new_dag.qubits)
+
+    for layer in dag.serial_layers():
+        subdag = layer['graph']
+        for node in subdag.op_nodes():
+            node_qargs = node.qargs
+            if len(node_qargs) > 1 and np.random.rand() > 0.8:
+                mitigate_layer = DAGCircuit()
+                mitigate_layer.add_qreg(canonical_register)
+                
+                for qubit in node_qargs:
+                    mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+                
+                new_dag.compose(mitigate_layer, qubits=order)
+                new_dag.compose(subdag, qubits=order)
+                # new_dag.compose(mitigate_layer, qubits=order)
+            else:
+                new_dag.compose(subdag, qubits=order)
+
+    mitigate_layer = DAGCircuit()
+    mitigate_layer.add_qreg(canonical_register)
+    for qubit in new_dag.qubits:
+        mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+    new_dag.compose(mitigate_layer, qubits=new_dag.qubits)
+    new_circuit = dag_to_circuit(new_dag)
+
+    return new_circuit
+
+
+if __name__ == '__main__':
+    from circuit_lib import random_circuit, DQCp, swaptest
+    rand_circuit = random_circuit(4, 10, 2)
+    # print(rand_circuit)
+    # rand_circuit = swaptest().decompose().decompose()
+    new_circuit = add_miti_gates_to_circuit(rand_circuit)
+    print(new_circuit)

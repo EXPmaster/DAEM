@@ -25,16 +25,15 @@ class SurrogateModel(nn.Module):
 
 class MitigateModel(nn.Module):
 
-    def __init__(self, num_layers, num_qubits, dim_in):
+    def __init__(self, dim_in, dim_out):
         super().__init__()
-        self.num_layers = num_layers
-        self.num_qubits = num_qubits
+        self.dim_out = dim_out
         self.net = nn.Sequential(
             nn.Linear(dim_in, 128),
             nn.Mish(inplace=True),
             nn.Linear(128, 256),
             nn.Mish(inplace=True),
-            nn.Linear(256, 4 * self.num_layers * self.num_qubits)
+            nn.Linear(256, dim_out * 4)
         )
 
     def forward(self, obs, exp_noisy):
@@ -42,28 +41,27 @@ class MitigateModel(nn.Module):
         # x = torch.cat((obs_cat.flatten(1), exp_noisy), 1)
         x = obs_cat.flatten(1)
         x = self.net(x)
-        x = x.view(-1, self.num_layers * self.num_qubits, 4)
+        x = x.view(-1, dim_out, 4)
         return torch.softmax(x, -1)
 
 
 class Generator(nn.Module):
 
-    def __init__(self, num_layers, num_qubits):
+    def __init__(self, dim_out):
         super().__init__()
-        self.num_layers = num_layers
-        self.num_qubits = num_qubits
+        self.dim_out = dim_out
         self.net = nn.Sequential(
             nn.Linear(8, 128),
             nn.Mish(inplace=True),
             nn.Linear(128, 256),
             nn.Mish(inplace=True),
-            nn.Linear(256, 4 * self.num_layers * self.num_qubits)
+            nn.Linear(256, 4 * dim_out)
         )
 
     def forward(self, obs):
         x = torch.cat((obs.real, obs.imag), -1).flatten(1)
         x = self.net(x)
-        x = x.view(-1, self.num_layers * self.num_qubits, 4)
+        x = x.view(-1, dim_out, 4)
         return torch.softmax(x, -1)
 
 

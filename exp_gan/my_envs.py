@@ -11,8 +11,9 @@ from qiskit import IBMQ, Aer, QuantumCircuit, transpile, execute
 from qiskit.providers.aer import AerSimulator
 import qiskit.opflow as opflow
 from qiskit.providers.aer.noise import NoiseModel
+import qiskit.providers.aer.noise as noise
 
-from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex
+from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex, add_miti_gates_to_circuit
 from utils import AverageMeter, ConfigDict
 from basis import *
 from circuit_lib import *
@@ -132,94 +133,67 @@ class IBMQEnv:
             self.config = pkl_file['config']
             self.circuit = pkl_file['circuit']
             self.state_table = pkl_file['state_table']
+            self.backend = pkl_file['noisy_backend']
+            self.miti_circuit = pkl_file['miti_circuit']
         else:
             assert args is not None, 'Arguments must be provided.'
             self.config = ConfigDict(
                 num_layers=args.num_layers,
                 num_qubits=args.num_qubits,
-                backend=args.backend
             )
             self.circuit = self._gen_new_circuit()
 
-            IBMQ.load_account()
-            provider = IBMQ.get_provider(
-                hub='ibm-q',
-                group='open',
-                project='main'
-            )
-            backend = provider.get_backend(self.config.backend)
-            self.backend = AerSimulator.from_backend(backend)
+            # IBMQ.load_account()
+            # provider = IBMQ.get_provider(
+            #     hub='ibm-q',
+            #     group='open',
+            #     project='main'
+            # )
+            # backend = provider.get_backend(self.config.backend)
+            # self.backend = AerSimulator.from_backend(backend)
+
+            noise_model = NoiseModel()
+            error_1 = noise.depolarizing_error(0.001, 1)  # single qubit gates
+            error_2 = noise.depolarizing_error(0.01, 2)
+            noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+            noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+
+            self.backend = AerSimulator(noise_model=noise_model)
+
             self.state_table = self.build_state_table()
 
         self.transformer = TransformCircWithPr(self.config.num_qubits)
-        # print(self.circuit)
+
+    def _gen_new_circuit(self):
+        return random_circuit(self.config.num_qubits, self.config.num_layers, max_operands=2)
 
     @staticmethod
-    def _gen_new_circuit():
-        circ = QuantumCircuit(2, 1)
-        circ.h(0)
-        circ.i(0)
-        circ.h(1)
-        circ.i(1)
-        circ.cx(0, 1)
-        circ.i(0)
-        circ.i(1)
-        circ.rz(np.pi/3, 1)
-        circ.i(1)
-        circ.cx(0, 1)
-        circ.i(0)
-        circ.i(1)
-        circ.h(0)
-        circ.i(0)
-        circ.barrier()
-        circ.measure(0, 0)
-        return circ
-
-    def gen_new_circuit_without_id(self):
-        # circ = QuantumCircuit(2)
-        # circ.h(0)
-        # circ.h(1)
-        # circ.cx(0, 1)
-        # circ.rz(np.pi/3, 1)
-        # circ.cx(0, 1)
-        # circ.h(0)
-        # # circ.barrier()
-        # # circ.measure(0, 0)
-        # # circ.save_density_matrix()
-        # # circ = swaptest().decompose().decompose()
-        qc = QuantumCircuit(2)
-
-        # CDR works better if the circuit is not too short. So we increase its depth.
-        for i in range(5): 
-            qc.h(0) # Clifford
-            qc.h(1) # Clifford
-            qc.rz(1.75, 0)
-            qc.rz(2.31, 1)
-            qc.cx(0,1) # Clifford
-            qc.rz(-1.17, 1)
-            qc.rz(3.23, 0)
-            qc.rx(np.pi/2, 0) # Clifford
-            qc.rx(np.pi/2, 1) # Clifford
-        self.circuit = qc
-
-    def count_mitigate_gates(self):
+    def count_mitigate_gates(circuit):
         num = 0
-        for item in self.circuit:
+        for item in circuit:
             num += item[0].name == 'id'
         return num
 
-    def build_state_table(self, shots_per_sim=2000):
+    def build_state_table(self, shots_per_sim=3000):
         print('Building look up table...')
         tsfm = TransformCircWithIndex()
-        num_identity = self.count_mitigate_gates()
-        table_size = len(self.transformer.basis_ops) ** num_identity
+        print(self.circuit)
+        mitigation_circuit = add_miti_gates_to_circuit(self.circuit)
+        self.miti_circuit = mitigation_circuit.copy()
+        mitigation_circuit.save_density_matrix()
+        num_identity = self.count_mitigate_gates(mitigation_circuit)
+        table_size = len(tsfm.basis_ops) ** num_identity
+        print(mitigation_circuit)
+        print(table_size)
         lut = []
         for i in tqdm(range(table_size)):
-            circuit = tsfm(self.circuit, i)
+            circuit = tsfm(mitigation_circuit, i)
             t_circuit = transpile(circuit, self.backend)
             result_noisy = self.backend.run(t_circuit, shots=shots_per_sim).result()
-            counts = result_noisy.get_counts()
-            lut.append(self.state_vector(counts, shots=shots_per_sim))
+            # counts = result_noisy.get_counts()
+            # lut.append(self.state_vector(counts, shots=shots_per_sim))
+            lut.append(result_noisy.data()['density_matrix'])
+
         return np.stack(lut)
 
     @staticmethod
@@ -242,16 +216,6 @@ class IBMQEnv:
         #     return self._get_mean_val(obs_batch, p_batch, nums)
         cum_p_batch = np.cumsum(p_batch, -1)
         batch_size = len(p_batch)
-        # results = []
-        # for i in range(nums):
-        #     u = np.random.rand(batch_size, p_batch.shape[1], 1)
-        #     choice_idx = (u < cum_p_batch).argmax(-1).reshape(batch_size, -1)
-        #     idx_str = np.char.mod('%d', choice_idx)
-        #     idx = np.apply_along_axis(_map_fn, 1, idx_str)
-        #     selected_state_vec = self.state_table[idx]
-        #     meas_results = (selected_state_vec[:, None, :] @ obs_batch @ selected_state_vec[:, :, None]).squeeze(-1).real
-        #     results.append(meas_results)
-        # return np.mean(results, 0)
         u = np.random.rand(nums, batch_size, p_batch.shape[1], 1)
         choice_idx = (u < cum_p_batch[None]).argmax(-1).reshape(nums, batch_size, -1)
         idx_str = np.char.mod('%d', choice_idx)
@@ -270,18 +234,10 @@ class IBMQEnv:
         return results.get_statevector(circuit)
 
     def simulate_noisy(self, shots=10000):
-        IBMQ.load_account()
-        provider = IBMQ.get_provider(
-            hub='ibm-q',
-            group='open',
-            project='main'
-        )
-        backend = provider.get_backend(self.config.backend)
-        backend = AerSimulator.from_backend(backend)
         circuit = self.circuit.copy()
         circuit.save_density_matrix()
-        t_circuit = transpile(circuit, backend)
-        results = backend.run(t_circuit, shots=shots).result()
+        t_circuit = transpile(circuit, self.backend)
+        results = self.backend.run(t_circuit, shots=shots).result()
         return results.data()['density_matrix']
     
     @staticmethod
@@ -304,7 +260,7 @@ class IBMQEnv:
     def _apply_step(self, obs, p):
         circuit = self._modify_circuit(p)
         t_circuit = transpile(circuit, self.backend)
-        result_noisy = self.backend.run(t_circuit, shots=1).result()
+        result_noisy = self.backend.run(t_circuit, shots=100).result()
         counts = result_noisy.get_counts()
         return self.measure_obs(counts, obs, shots=1)
         
@@ -320,7 +276,13 @@ class IBMQEnv:
         return sum_val / nums
 
     def save(self, path):
-        save_data = dict(config=self.config, circuit=self.circuit, state_table=self.state_table)
+        save_data = dict(
+            config=self.config,
+            circuit=self.circuit,
+            state_table=self.state_table,
+            noisy_backend=self.backend,
+            miti_circuit=self.miti_circuit
+        )
         with open(path, 'wb') as f:
             pickle.dump(save_data, f)
         print(f'Environment saved at {path}.')
@@ -372,10 +334,10 @@ if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     
     ArgsClass = namedtuple('args', ['num_layers', 'num_qubits', 'backend', 'env_path', 'data_num'])
-    args = ArgsClass(8, 2, 'ibmq_santiago', '../environments/ibmq1.pkl', 16)
+    args = ArgsClass(10, 4, 'ibmq_santiago', '../environments/ibmq_random.pkl', 16)
     # print(args)
-    # env = IBMQEnv(args)
-    # env.save(args.env_path)
-    main(args)
+    env = IBMQEnv(args)
+    env.save(args.env_path)
+    # main(args)
     # print(env.circuit)
     

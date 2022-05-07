@@ -14,9 +14,9 @@ from datasets import MitigateDataset
 def main(args):
     trainset, testset, train_loader, test_loader = build_dataloader(args, MitigateDataset)
     loss_fn = nn.MSELoss()
-    model_s = SurrogateModel(dim_in=4 * args.num_layers * args.num_qubits + 8).to(args.device)
+    model_s = SurrogateModel(dim_in=4 * args.num_mitigates + 8).to(args.device)
     model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
-    model_g = MitigateModel(num_layers=args.num_layers, num_qubits=args.num_qubits, dim_in=8).to(args.device)
+    model_g = MitigateModel(dim_in=8, dim_out=args.num_mitigates).to(args.device)
     optimizer = optim.Adam([{'params': model_g.parameters()},
                             {'params': model_s.parameters(), 'lr': 1e-6}], lr=args.lr)
     print('Start training...')
@@ -81,8 +81,7 @@ if __name__ == '__main__':
     parser.add_argument('--logdir', default='../runs/env_ibmq', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--num-layers', default=4, type=int, help='depth of the circuit')
-    parser.add_argument('--num-qubits', default=2, type=int, help='number of qubits')
+    parser.add_argument('--num-mitigates', default=32, type=int, help='number of mitigation gates')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
     parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpus', default='0', type=str)
