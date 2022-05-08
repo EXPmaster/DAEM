@@ -167,8 +167,9 @@ class IBMQEnv:
     def _gen_new_circuit(self):
         return random_circuit(self.config.num_qubits, self.config.num_layers, max_operands=2)
 
-    @staticmethod
-    def count_mitigate_gates(circuit):
+    def count_mitigate_gates(self, circuit=None):
+        if circuit is None:
+            circuit = self.miti_circuit
         num = 0
         for item in circuit:
             num += item[0].name == 'id'
@@ -220,15 +221,17 @@ class IBMQEnv:
         choice_idx = (u < cum_p_batch[None]).argmax(-1).reshape(nums, batch_size, -1)
         idx_str = np.char.mod('%d', choice_idx)
         idx = np.apply_along_axis(_map_fn, -1, idx_str)
-        selected_state_vec = self.state_table[idx]
-        meas_results = (selected_state_vec[:, :, None, :] @ obs_batch @ selected_state_vec[:, :, :, None]).squeeze(-1).real
-        return np.mean(meas_results, 0)
+        # selected_state_vec = self.state_table[idx]
+        # meas_results = (selected_state_vec[:, :, None, :] @ obs_batch @ selected_state_vec[:, :, :, None]).squeeze(-1).real
+        selected_rho = self.state_table[idx]
+        meas_results = np.trace(selected_rho @ np.kron(np.eye(2 ** 3)[None], obs_batch), axis1=-2, axis2=-1).real
+        return np.mean(meas_results, 0)[:, None]
 
-    def simulate_ideal(self, shots=1):
+    def simulate_ideal(self, shots=100):
         circuit = self.circuit.copy()
         circuit.save_statevector()
         backend = Aer.get_backend('aer_simulator')
-        results = backend.run(circuit, shots=shots).result()
+        results = backend.run(transpile(circuit, backend), shots=shots).result()
         # counts = results.get_counts()
         # return self.state_vector(counts, shots)
         return results.get_statevector(circuit)
