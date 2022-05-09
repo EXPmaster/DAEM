@@ -6,7 +6,7 @@ from exp_torch.utils import AverageMeter
 
 
 if __name__ == '__main__':
-    data_path = 'data_mitigate/testset_1.pkl'
+    data_path = 'data_mitigate/testset_3.pkl'
     dataset = MitigateDataset(data_path)
     print(len(dataset))
 

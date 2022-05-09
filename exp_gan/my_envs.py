@@ -153,7 +153,7 @@ class IBMQEnv:
             # self.backend = AerSimulator.from_backend(backend)
 
             noise_model = NoiseModel()
-            error_1 = noise.depolarizing_error(0.001, 1)  # single qubit gates
+            error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
             error_2 = noise.depolarizing_error(0.01, 2)
             noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
             noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
@@ -227,7 +227,7 @@ class IBMQEnv:
         meas_results = np.trace(selected_rho @ np.kron(np.eye(2 ** 3)[None], obs_batch), axis1=-2, axis2=-1).real
         return np.mean(meas_results, 0)[:, None]
 
-    def simulate_ideal(self, shots=100):
+    def simulate_ideal(self, shots=1000):
         circuit = self.circuit.copy()
         circuit.save_statevector()
         backend = Aer.get_backend('aer_simulator')

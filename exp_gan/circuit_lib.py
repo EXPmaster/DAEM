@@ -210,7 +210,10 @@ def test_circuit():
 
 
 if __name__ == '__main__':
-    circuit = swaptest()
-    circuit = test_circuit()
-    graph = circuit.draw(output='latex', scale=3.0, initial_state=True)
-    graph.save('swaptest.png', quality=95)
+    # circuit = swaptest()
+    # circuit = test_circuit()
+    from my_envs import IBMQEnv
+    # env = IBMQEnv.load('../environments/ibmq_random.pkl')
+    circuit = DQCp()
+    graph = circuit.draw(output='latex', scale=2.0, idle_wires=False, initial_state=True)
+    graph.save('../imgs/dqcp.png', quality=95)

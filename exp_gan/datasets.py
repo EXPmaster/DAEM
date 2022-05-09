@@ -8,6 +8,10 @@ import pathos
 import cirq
 from tqdm import tqdm
 
+from qiskit.providers.aer import AerSimulator
+from qiskit.providers.aer.noise import NoiseModel
+import qiskit.providers.aer.noise as noise
+
 from my_envs import QCircuitEnv, IBMQEnv, stable_softmax
 
 
@@ -111,11 +115,17 @@ def gen_fn(num_qubits, output_state, rho, num_samples):
 def gen_mitigation_data_ibmq(args):
     env = IBMQEnv.load(args.env_path)
     # env.gen_new_circuit_without_id()
+    noise_model = NoiseModel()
+    error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
+    error_2 = noise.depolarizing_error(0.01, 2)
+    noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+    noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+
+    env.backend = AerSimulator(noise_model=noise_model)
+
     print(env.circuit)
     ideal_state = env.simulate_ideal()
     noisy_state = env.simulate_noisy()
-    print(ideal_state)
-    print(noisy_state)
     dataset = []
     for i in tqdm(range(args.num_data)):
         rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
@@ -134,7 +144,7 @@ def gen_mitigation_data_ibmq(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/ibmq_random.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/ibmq_random_mitigate.pkl', type=str)
+    parser.add_argument('--out-path', default='../data_mitigate/ibmq_random_mitigate2.pkl', type=str)
     parser.add_argument('--num-data', default=400_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
