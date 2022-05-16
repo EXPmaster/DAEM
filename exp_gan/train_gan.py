@@ -23,7 +23,7 @@ def main(args):
     optimizer_d = optim.Adam(model_d.parameters(), lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.015
+    best_metric = 1.0
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_s, model_d, loss_fn, optimizer_g, optimizer_d)
@@ -38,7 +38,9 @@ def main(args):
                 'optimizer_g': optimizer_g.state_dict(),
                 'optimizer_d': optimizer_d.state_dict()
             }
-            torch.save(ckpt, os.path.join(args.logdir, 'gan_model.pt'))
+            torch.save(ckpt, os.path.join(args.logdir, args.save_name))
+    with open(os.path.join(args.logdir, 'metric_gan.txt'), 'a+') as f:
+        f.write('{} {:.6f}\n'.format(len(trainset), best_metric))
 
 
 def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, optimizer_d):
@@ -58,7 +60,9 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
 
         ## fake
         rand_matrix = torch.randn((args.batch_size, 2, 2), dtype=torch.cfloat).to(args.device)
-        rand_obs = torch.bmm(rand_matrix.conj().transpose(-2, -1), rand_matrix)
+        rand_hermitian = torch.bmm(rand_matrix.conj().mT, rand_matrix)
+        eigen_vals = torch.linalg.eigvalsh(rand_hermitian)
+        rand_obs = rand_hermitian / eigen_vals.max(1, keepdim=True)[0][:, :, None]
         labels.fill_(0.0)
         fake = model_s(model_g(rand_obs), rand_obs)
         output = model_d(fake.detach(), rand_obs)
@@ -115,9 +119,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', default=128, type=int)
     parser.add_argument('--num-mitigates', default=8, type=int, help='number of mitigation gates')
     parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
-    parser.add_argument('--epochs', default=500, type=int)
+    parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
+    parser.add_argument('--nosave', default=False, action='store_true', help='not to save model')
+    parser.add_argument('--save-name', default='gan_model.pt', type=str, help='model file name')
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus

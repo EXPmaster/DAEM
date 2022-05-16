@@ -123,13 +123,15 @@ def gen_mitigation_data_ibmq(args):
 
     env.backend = AerSimulator(noise_model=noise_model)
 
-    print(env.circuit)
+    # print(env.circuit)
     ideal_state = env.simulate_ideal()
     noisy_state = env.simulate_noisy()
     dataset = []
     for i in tqdm(range(args.num_data)):
         rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
         rand_obs = rand_matrix.conj().T @ rand_matrix
+        eigen_val = np.linalg.eigvalsh(rand_obs)
+        rand_obs = rand_obs / np.max(eigen_val)
         # rand_obs = np.diag([1., -1])
         obs = np.kron(np.eye(2**3), rand_obs)
         exp_ideal = ideal_state.expectation_value(obs).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
@@ -144,8 +146,8 @@ def gen_mitigation_data_ibmq(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/ibmq_random.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/ibmq_random_mitigate2.pkl', type=str)
-    parser.add_argument('--num-data', default=400_000, type=int)
+    parser.add_argument('--out-path', default='../data_mitigate/testset_randomcirc.pkl', type=str)
+    parser.add_argument('--num-data', default=80_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
     # print(next(iter(dataset)))

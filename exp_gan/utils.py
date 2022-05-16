@@ -19,9 +19,9 @@ class ConfigDict(dict):
 
 def build_dataloader(args, dataset):
     trainset = dataset(args.train_path)
-    train_loader = DataLoader(trainset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
+    train_loader = DataLoader(trainset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
     testset = dataset(args.test_path)
-    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
+    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
 
     return trainset, testset, train_loader, test_loader
 
