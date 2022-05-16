@@ -63,6 +63,7 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         rand_hermitian = torch.bmm(rand_matrix.conj().mT, rand_matrix)
         eigen_vals = torch.linalg.eigvalsh(rand_hermitian)
         rand_obs = rand_hermitian / eigen_vals.max(1, keepdim=True)[0][:, :, None]
+        rand_obs = torch.cat((rand_obs[:args.batch_size//2], obs[:args.batch_size//2]), 0)
         labels.fill_(0.0)
         fake = model_s(model_g(rand_obs), rand_obs)
         output = model_d(fake.detach(), rand_obs)
@@ -112,9 +113,9 @@ def validate(epoch, args, loader, model_g, model_s, loss_fn):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--train-path', default='../data_mitigate/trainset_2.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/testset_2.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/testset_randomcirc.pkl', type=str)
     parser.add_argument('--weight-path', default='../runs/env_ibmq_random/model_surrogate.pt', type=str)
-    parser.add_argument('--logdir', default='../runs/env_ibmq_random', type=str, help='path to save logs and models')
+    parser.add_argument('--logdir', default='../runs/exp', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=128, type=int)
     parser.add_argument('--num-mitigates', default=8, type=int, help='number of mitigation gates')
