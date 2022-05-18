@@ -135,7 +135,7 @@ def add_miti_gates_to_circuit(circuit):
         subdag = layer['graph']
         for node in subdag.op_nodes():
             node_qargs = node.qargs
-            if len(node_qargs) > 1 and np.random.rand() > 0.8:
+            if len(node_qargs) > 1 and np.random.rand() > 1.0:
                 mitigate_layer = DAGCircuit()
                 mitigate_layer.add_qreg(canonical_register)
                 

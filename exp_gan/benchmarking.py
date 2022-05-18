@@ -1,22 +1,89 @@
 import pickle
+import os
 import random
 from functools import partial
 import argparse
+
 from cirq import DensityMatrixSimulator, depolarize
 
 from mitiq.interface.mitiq_qiskit import qiskit_utils
 from mitiq import zne, cdr, pec
 from mitiq.interface import convert_to_mitiq
-from mitiq.pec.representations.depolarizing import represent_operations_in_circuit_with_global_depolarizing_noise
-
+from mitiq.pec.representations.depolarizing import represent_operations_in_circuit_with_local_depolarizing_noise
 
 import qiskit
 from qiskit import IBMQ, Aer, QuantumCircuit, transpile, execute
 from qiskit.providers.aer import AerSimulator
 from qiskit.providers.aer.noise import NoiseModel, depolarizing_error
-import numpy as np
 
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+
+from model import *
+from utils import AverageMeter, abs_deviation
 from my_envs import IBMQEnv
+from datasets import MitigateDataset
+
+
+def benckmark_gan():
+    circuit = env.circuit.copy()
+    # circuit = transpile(circuit, basis_gates=["u1", "u2", "u3", "cx"])
+    circuit = transpile(circuit, basis_gates=['x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg', "rx", "ry", "rz", "cx", 'cy', 'cz', 'ch', "u1", "u2", "u3"])
+    circuit,_ = convert_to_mitiq(circuit)
+    dataset_torch = MitigateDataset(args.test_data)
+    loader = DataLoader(dataset_torch, batch_size=128)
+
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = Generator(dim_out=args.num_mitigates).to(args.device)
+    model_s = SurrogateModel(dim_in=4 * args.num_mitigates + 8).to(args.device)
+    model_g.load_state_dict(ckpt['model_g'])
+    model_s.load_state_dict(ckpt['model_s'])
+    model_g.requires_grad_(False)
+    model_s.requires_grad_(False)
+    model_g.eval()
+    model_s.eval()
+    metric = AverageMeter()
+    with torch.no_grad():
+        for itr, (obs, exp_noisy, gts) in enumerate(loader):
+            obs, exp_noisy, gts = obs.to(args.device), exp_noisy.to(args.device), gts.to(args.device)
+            prs = model_g(obs)
+            predicts = model_s(prs, obs)
+            metric.update(abs_deviation(predicts, gts))
+
+        value = metric.getval()
+
+    print('validation absolute deviation: {:.6f}'.format(value))
+
+
+def benckmark_supervise():
+    circuit = env.circuit.copy()
+    # circuit = transpile(circuit, basis_gates=["u1", "u2", "u3", "cx"])
+    circuit = transpile(circuit, basis_gates=['x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg', "rx", "ry", "rz", "cx", 'cy', 'cz', 'ch', "u1", "u2", "u3"])
+    circuit,_ = convert_to_mitiq(circuit)
+    dataset_torch = MitigateDataset(args.test_data)
+    loader = DataLoader(dataset_torch, batch_size=128)
+
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = MitigateModel(dim_in=8, dim_out=args.num_mitigates).to(args.device)
+    model_s = SurrogateModel(dim_in=4 * args.num_mitigates + 8).to(args.device)
+    model_g.load_state_dict(ckpt['model_g'])
+    model_s.load_state_dict(ckpt['model_s'])
+    model_g.requires_grad_(False)
+    model_s.requires_grad_(False)
+    model_g.eval()
+    model_s.eval()
+    metric = AverageMeter()
+    with torch.no_grad():
+        for itr, (obs, exp_noisy, gts) in enumerate(loader):
+            obs, exp_noisy, gts = obs.to(args.device), exp_noisy.to(args.device), gts.to(args.device)
+            prs = model_g(obs, 0)
+            predicts = model_s(prs, obs)
+            metric.update(abs_deviation(predicts, gts))
+
+        value = metric.getval()
+
+    print('validation absolute deviation: {:.6f}'.format(value))
 
 
 def benchmark_zne():
@@ -24,14 +91,13 @@ def benchmark_zne():
     # circuit.measure(0, 0)
     # circuit = transpile(circuit, basis_gates=["u1", "u2", "u3", "cx"])
     circuit = transpile(circuit, basis_gates=['x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg', "rx", "ry", "rz", "cx", 'cy', 'cz', 'ch', "u1", "u2", "u3"])
-    scale_factors = np.arange(1, 3, 0.5)  # [1., 1.5, 2., 2.5, 3.]
-    folded_circuits = [
-        zne.scaling.fold_gates_at_random(circuit, scale)
-        for scale in scale_factors
-    ]
-    shots = 20000
-    array = []
-    array_nomiti = []
+    circuit,_ = convert_to_mitiq(circuit)
+    # scale_factors = np.arange(1, 3, 0.5)  # [1., 1.5, 2., 2.5, 3.]
+    # folded_circuits = [
+    #     zne.scaling.fold_gates_at_random(circuit, scale)
+    #     for scale in scale_factors
+    # ]
+    # shots = 20000
     # for obs, noisy, ideal in dataset[:5]:
     #     # obs = np.diag([1., -1.])
     #     obs = np.kron(np.eye(2**3), obs)
@@ -54,6 +120,8 @@ def benchmark_zne():
     #     # print(array)
     #     # print(array_nomiti)
     #     # assert False
+    array = []
+    array_nomiti = []
     for obs, noisy, ideal in dataset:
         # obs = np.diag([1., -1.])
         obs = np.kron(obs, np.eye(2**3))
@@ -76,6 +144,7 @@ def benchmark_cdr():
     ideal_state = env.simulate_ideal()
     circuit = env.circuit.copy()
     circuit = transpile(circuit, basis_gates=["rx", "ry", "rz", "cx"])
+    circuit,_ = convert_to_mitiq(circuit)
     # circuit.measure(0, 0)
     # print(circuit)
     shots = 10000
@@ -136,9 +205,11 @@ def sim(circ, obs, shots):
 
 def benchmark_pec():
     circuit = env.circuit.copy()
-    circuit = transpile(circuit, basis_gates=["rx", "ry", "rz", "cx"])
+    # circuit = transpile(circuit, basis_gates=["rx", "ry", "rz", "cx"])
+    circuit = transpile(circuit, basis_gates=['x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg', "rx", "ry", "rz", "cx", 'cy', 'cz', 'ch', "u1", "u2", "u3"])
+    circuit,_ = convert_to_mitiq(circuit)
     noise_level = 0.01
-    reps = represent_operations_in_circuit_with_global_depolarizing_noise(circuit, noise_level)
+    reps = represent_operations_in_circuit_with_local_depolarizing_noise(circuit, noise_level)
     array = []
     array_nomiti = []
     for obs, exp_noisy, exp_ideal in dataset[:1]:
@@ -161,9 +232,9 @@ def benchmark_pec():
     print('mitigation ratio: ', original_deviation / mitigated_deviation)
     
 
-def execute_pec(circuit, obs, noise_level=0.01):
+def execute_pec(mitiq_circuit, obs, noise_level=0.01):
     # Replace with code based on your frontend and backend.
-    mitiq_circuit, _ = convert_to_mitiq(circuit)
+    # mitiq_circuit, _ = convert_to_mitiq(circuit)
     # We add a simple noise model to simulate a noisy backend.
     noisy_circuit = mitiq_circuit.with_noise(depolarize(p=noise_level))
     rho = DensityMatrixSimulator().simulate(noisy_circuit).final_density_matrix
@@ -175,9 +246,14 @@ if __name__ == '__main__':
     np.random.seed(0)
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/ibmq_random.pkl', type=str)
-    parser.add_argument('--method', default='zne', type=str, help='[zne, cdr, pec]')
+    parser.add_argument('--method', default='zne', type=str, help='[zne, cdr, pec, gan, supervise]')
     parser.add_argument('--test-data', default='../data_mitigate/testset_randomcirc.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/ibmq_multiround/gan_model300000.pt', type=str)
+    parser.add_argument('--num-mitigates', default=8, type=int, help='number of mitigation gates')
+    parser.add_argument('--gpus', default='0', type=str)
     args = parser.parse_args()
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
+    args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     # IBMQ.load_account()
     # provider = IBMQ.get_provider(
     #     hub='ibm-q',
@@ -204,5 +280,9 @@ if __name__ == '__main__':
         benchmark_cdr()
     elif args.method == 'pec':
         benchmark_pec()
+    elif args.method == 'gan':
+        benckmark_gan()
+    elif args.method == 'supervise':
+        benckmark_supervise()
     else:
         print('No such method [{}]!'.format(args.method))

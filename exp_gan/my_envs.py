@@ -165,6 +165,7 @@ class IBMQEnv:
         self.transformer = TransformCircWithPr(self.config.num_qubits)
 
     def _gen_new_circuit(self):
+        # return swaptest().decompose().decompose()
         return random_circuit(self.config.num_qubits, self.config.num_layers, max_operands=2)
 
     def count_mitigate_gates(self, circuit=None):
@@ -337,7 +338,7 @@ if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     
     ArgsClass = namedtuple('args', ['num_layers', 'num_qubits', 'backend', 'env_path', 'data_num'])
-    args = ArgsClass(10, 4, 'ibmq_santiago', '../environments/ibmq_random.pkl', 16)
+    args = ArgsClass(10, 5, 'ibmq_santiago', '../environments/swaptest.pkl', 16)
     # print(args)
     env = IBMQEnv(args)
     env.save(args.env_path)

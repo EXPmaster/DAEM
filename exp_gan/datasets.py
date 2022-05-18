@@ -115,25 +115,28 @@ def gen_fn(num_qubits, output_state, rho, num_samples):
 def gen_mitigation_data_ibmq(args):
     env = IBMQEnv.load(args.env_path)
     # env.gen_new_circuit_without_id()
-    noise_model = NoiseModel()
-    error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
-    error_2 = noise.depolarizing_error(0.01, 2)
-    noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
-    noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+    # noise_model = NoiseModel()
+    # error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
+    # error_2 = noise.depolarizing_error(0.01, 2)
+    # noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+    # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
 
-    env.backend = AerSimulator(noise_model=noise_model)
+    # env.backend = AerSimulator(noise_model=noise_model)
 
     # print(env.circuit)
     ideal_state = env.simulate_ideal()
     noisy_state = env.simulate_noisy()
     dataset = []
     for i in tqdm(range(args.num_data)):
-        rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
-        rand_obs = rand_matrix.conj().T @ rand_matrix
+        # rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
+        # rand_obs = rand_matrix.conj().T @ rand_matrix
+        rand_matrix = (torch.rand((2, 2), dtype=torch.cfloat) * 2 - 1).numpy()
+        rand_obs = (rand_matrix.conj().T + rand_matrix) / 2
         eigen_val = np.linalg.eigvalsh(rand_obs)
-        rand_obs = rand_obs / np.max(eigen_val)
+        rand_obs = rand_obs / np.max(np.abs(eigen_val))
+        assert (rand_obs < 100).all(), eigen_val
         # rand_obs = np.diag([1., -1])
-        obs = np.kron(np.eye(2**3), rand_obs)
+        obs = np.kron(np.eye(2**4), rand_obs)
         exp_ideal = ideal_state.expectation_value(obs).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
         exp_noisy = noisy_state.expectation_value(obs).real
         dataset.append([rand_obs, round(exp_noisy, 8), round(exp_ideal, 8)])
@@ -145,9 +148,9 @@ def gen_mitigation_data_ibmq(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-path', default='../environments/ibmq_random.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/testset_randomcirc.pkl', type=str)
-    parser.add_argument('--num-data', default=80_000, type=int)
+    parser.add_argument('--env-path', default='../environments/swaptest.pkl', type=str)
+    parser.add_argument('--out-path', default='../data_mitigate/swaptest.pkl', type=str)
+    parser.add_argument('--num-data', default=400_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
     # print(next(iter(dataset)))
