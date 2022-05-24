@@ -52,7 +52,7 @@ def infer_supervised(args):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--weight-path', default='../runs/env_swaptest/gan_model.pt', type=str)
+	parser.add_argument('--weight-path', default='../runs/env_swaptest/mitigation_model.pt', type=str)
 	parser.add_argument('--batch-size', default=128, type=int)
 	parser.add_argument('--num-mitigates', default=5, type=int, help='number of mitigation gates')
 	parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
@@ -62,6 +62,6 @@ if __name__ == '__main__':
 	os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 	args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-	# infer_supervised(args)
-	infer_gan(args)
+	infer_supervised(args)
+	# infer_gan(args)
 

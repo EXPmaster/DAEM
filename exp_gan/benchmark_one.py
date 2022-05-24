@@ -91,7 +91,7 @@ def benchmark_pec(circuit):
     expectation_ideal = execute_pec(circuit, obs, noise_level=0.0)
     print('ideal value', expectation_ideal)
     expectation_noisy = execute_pec(circuit, obs)
-    pec_value = pec.execute_with_pec(circuit, partial(execute_pec, obs=obs), representations=reps)
+    pec_value = pec.execute_with_pec(circuit, partial(execute_pec, obs=obs), representations=reps, num_samples=100000)
     
     original_deviation = abs(expectation_ideal - expectation_noisy)
     mitigated_deviation = abs(expectation_ideal - pec_value)
