@@ -44,39 +44,38 @@ class VQETrainer:
                 qc.barrier()
         return qc
 
-    def get_random_hamitonian_ising(self):
+    def get_hamitonian_ising(self, g=None):
         operators = []
         op_str = 'IIII'
         for i in range(self.num_qubits - 1):
             tmp_op = op_str[:i] + 'ZZ' + op_str[i + 2:]
             operators.append(PauliOp(Pauli(tmp_op), -1.0))
-        g = np.random.uniform(-2, 2)
-        # g = 0.3
+        if g is None:
+            g = np.random.uniform(-2, 2)
         for i in range(self.num_qubits):
             tmp_op = op_str[:i] + 'X' + op_str[i + 1:]
             operators.append(PauliOp(Pauli(tmp_op), -g))
-
         hamitonian = sum(operators)
         return hamitonian
 
-    def train(self, circuit, hamitonian, num_iters=1000, num_shots=1000):
-        backend = Aer.get_backend('qasm_simulator')
+    def train(self, circuit, hamitonian, num_iters=1000, num_shots=1):
+        # backend = Aer.get_backend('qasm_simulator')
         # qinstance = QuantumInstance(backend=backend,
         #                             shots=num_shots)
         qinstance = QuantumInstance(QasmSimulator(method='matrix_product_state'), shots=num_shots)
         # optimizer = SPSA(maxiter=num_iters)
         optimizer = SLSQP(maxiter=num_iters)
         vqe = VQE(ansatz=circuit,
-                  gradient=Gradient(grad_method='lin_comb'),
+                  # gradient=Gradient(grad_method='lin_comb'),
                   optimizer=optimizer,
-                  quantum_instance=qinstance
+                  quantum_instance=qinstance,
+                  include_custom=True
                   )
-        result = vqe.compute_minimum_eigenvalue(operator=hamitonian)
-        print('VQE result: ', result.optimal_value)
+        result_vqe = vqe.compute_minimum_eigenvalue(operator=hamitonian)
         npme = NumPyMinimumEigensolver()
-        result = npme.compute_minimum_eigenvalue(operator=hamitonian)
-        ref_value = result.eigenvalue.real
-        print('Calculation result:', ref_value)
+        result_np = npme.compute_minimum_eigenvalue(operator=hamitonian)
+        ref_value = result_np.eigenvalue.real
+        print('VQE result: {},\t Calculation result: {}'.format(result_vqe.optimal_value, ref_value))
 
     def validate_result(self):
         ...
@@ -85,9 +84,8 @@ class VQETrainer:
 if __name__ == '__main__':
     trainer = VQETrainer(4, 3)
     circuit = trainer.get_circuit()
-    H = trainer.get_random_hamitonian_ising()
-    trainer.train(circuit, H)
-    # print(circuit)
-
+    for x in np.arange(-2.0, 2.0, 0.5):
+        H = trainer.get_hamitonian_ising(x)
+        trainer.train(circuit, H)
     # from Ising_random_ground_state_generation import exact_E
     # print(exact_E(4, 1.0, 0.3))
