@@ -1,5 +1,7 @@
 from itertools import product
+import pickle
 import numpy as np
+import qiskit
 from qiskit import Aer, transpile, assemble
 from qiskit import QuantumCircuit, ClassicalRegister, QuantumRegister
 from qiskit.circuit import Parameter
@@ -58,7 +60,7 @@ class VQETrainer:
         hamitonian = sum(operators)
         return hamitonian
 
-    def train(self, circuit, hamitonian, num_iters=1000, num_shots=1):
+    def train(self, circuit, hamitonian, num_iters=1000, num_shots=1, save_path=None):
         # backend = Aer.get_backend('qasm_simulator')
         # qinstance = QuantumInstance(backend=backend,
         #                             shots=num_shots)
@@ -76,16 +78,41 @@ class VQETrainer:
         result_np = npme.compute_minimum_eigenvalue(operator=hamitonian)
         ref_value = result_np.eigenvalue.real
         print('VQE result: {},\t Calculation result: {}'.format(result_vqe.optimal_value, ref_value))
-
-    def validate_result(self):
-        ...
+        if save_path is not None:
+            bind_ansatz = vqe.ansatz.bind_parameters(result_vqe.optimal_point)
+            with open(save_path, 'wb') as f:
+                pickle.dump(bind_ansatz, f)
+            print(f'Trained ansatz saved to {save_path}.')
 
 
 if __name__ == '__main__':
     trainer = VQETrainer(4, 3)
     circuit = trainer.get_circuit()
-    for x in np.arange(-2.0, 2.0, 0.5):
+    for i, x in enumerate(np.arange(-2.0, 2.0, 0.25)):
         H = trainer.get_hamitonian_ising(x)
-        trainer.train(circuit, H)
-    # from Ising_random_ground_state_generation import exact_E
-    # print(exact_E(4, 1.0, 0.3))
+        trainer.train(circuit, H, save_path=f'../environments/circuits/vqe_{x}.pkl')
+
+
+    # H = trainer.get_hamitonian_ising(1.0)
+    # # trainer.train(circuit, H, save_path='tmp.pkl')
+    # # from Ising_random_ground_state_generation import exact_E
+    # # print(exact_E(4, 1.0, 0.3))
+    # with open('tmp.pkl', 'rb') as f:
+    #     circuit = pickle.load(f)
+
+    # qinstance = QuantumInstance(QasmSimulator(method='matrix_product_state'), shots=1)
+    # operator = H.to_matrix()
+    # eigvals, U = np.linalg.eigh(operator)
+    # circuit.unitary(np.linalg.inv(U), qubits=range(circuit.num_qubits))
+    # circuit.measure_all()
+    # backend = Aer.get_backend('aer_simulator')
+    # shots = 1024
+    
+    # results = backend.run(circuit, shots=shots).result()
+    # counts = results.get_counts()
+    # expectation = 0
+    # for bitstring, count in counts.items():
+    #     expectation += (
+    #         eigvals[int(bitstring[0 : circuit.num_qubits], 2)] * count / shots
+    #     )
+    # print(expectation)
