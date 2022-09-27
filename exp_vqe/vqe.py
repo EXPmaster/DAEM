@@ -48,7 +48,7 @@ class VQETrainer:
 
     def get_hamitonian_ising(self, g=None):
         operators = []
-        op_str = 'IIII'
+        op_str = 'I' * self.num_qubits
         for i in range(self.num_qubits - 1):
             tmp_op = op_str[:i] + 'ZZ' + op_str[i + 2:]
             operators.append(PauliOp(Pauli(tmp_op), -1.0))
@@ -83,14 +83,16 @@ class VQETrainer:
             with open(save_path, 'wb') as f:
                 pickle.dump(bind_ansatz, f)
             print(f'Trained ansatz saved to {save_path}.')
+        return vqe.ansatz.bind_parameters(result_vqe.optimal_point)
 
 
 if __name__ == '__main__':
-    trainer = VQETrainer(4, 3)
+    trainer = VQETrainer(6, 3)
     circuit = trainer.get_circuit()
     for i, x in enumerate(np.arange(-2.0, 2.0, 0.25)):
         H = trainer.get_hamitonian_ising(x)
         trainer.train(circuit, H, save_path=f'../environments/circuits/vqe_{x}.pkl')
+
 
 
     # H = trainer.get_hamitonian_ising(1.0)

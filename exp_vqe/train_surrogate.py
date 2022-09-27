@@ -8,22 +8,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import *
 from utils import AverageMeter, build_dataloader, abs_deviation
-from datasets import SurrogateGenerator
+from datasets import SurrogateGenerator, SurrogateDataset
 
 
 def main(args):
-    loader = SurrogateGenerator(args.env_path, args.batch_size)
+    # loader = SurrogateGenerator(args.env_path, args.batch_size)
+    trainset, testset, train_loader, test_loader = build_dataloader(args, SurrogateDataset)
     loss_fn = nn.MSELoss()
     print(f'Model type: {args.model_type}.')
-    model = SurrogateModel(dim_in=4 * loader.num_miti_gates + 8).to(args.device)
+    num_mitigates = 6
+    model = SurrogateModel(num_mitigates).to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print('Start training...')
 
     best_metric = 0.075
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
-        train(epoch, args, loader, model, loss_fn, optimizer)
-        metric = validate(epoch, args, loader, model, loss_fn)
+        train(epoch, args, train_loader, model, loss_fn, optimizer)
+        metric = validate(epoch, args, test_loader, model, loss_fn)
 
         if metric < best_metric:
             print('Saving model...')
@@ -34,10 +36,10 @@ def main(args):
 def train(epoch, args, loader, model, loss_fn, optimizer):
     model.train()
     loss_accumulator = AverageMeter()
-    for itr, (prs, obs, gts) in enumerate(loader):
-        prs, obs, gts = prs.to(args.device), obs.to(args.device), gts.to(args.device)
+    for itr, (params, prs, obs, pos, gts) in enumerate(loader):
+        params, prs, obs, pos, gts = params.to(args.device), prs.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
         optimizer.zero_grad()
-        predicts = model(prs, obs)
+        predicts = model(params, prs, obs, pos)
         loss = loss_fn(predicts, gts)
         loss_accumulator.update(loss)
         loss.backward()
@@ -52,9 +54,9 @@ def validate(epoch, args, loader, model, loss_fn):
     model.eval()
     metric = AverageMeter()
     loader.cur_itr = 30
-    for itr,(prs, obs, gts) in enumerate(loader):
-        prs, obs, gts = prs.to(args.device), obs.to(args.device), gts.to(args.device)
-        predicts = model(prs, obs)
+    for itr,(params, prs, obs, pos, gts) in enumerate(loader):
+        params, prs, obs, pos, gts = params.to(args.device), prs.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
+        predicts = model(params, prs, obs, pos)
         metric.update(abs_deviation(predicts, gts))
 
     value = metric.getval()
@@ -66,13 +68,13 @@ def validate(epoch, args, loader, model, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--train-path', default='../data_surrogate/env1_data.pkl', type=str)
-    # parser.add_argument('--test-path', default='../data_surrogate/env1_data.pkl', type=str)
+    parser.add_argument('--train-path', default='../data_surrogate/env_vqe_data.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_surrogate/env_vqe_test.pkl', type=str)
     parser.add_argument('--env-path', default='../environments/swaptest.pkl', type=str)
-    parser.add_argument('--logdir', default='../runs/env_swaptest', type=str, help='path to save logs and models')
+    parser.add_argument('--logdir', default='../runs/env_vqe', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--workers', default=8, type=int, help='dataloader worker nums')
+    parser.add_argument('--workers', default=4, type=int, help='dataloader worker nums')
     parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpus', default='0', type=str)
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')

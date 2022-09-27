@@ -1,5 +1,7 @@
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
+from qiskit.quantum_info.operators import Pauli
 
 
 class ConfigDict(dict):
@@ -19,11 +21,25 @@ class ConfigDict(dict):
 
 def build_dataloader(args, dataset):
     trainset = dataset(args.train_path)
-    train_loader = DataLoader(trainset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
+    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True, drop_last=True)
     testset = dataset(args.test_path)
     test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
 
     return trainset, testset, train_loader, test_loader
+
+
+def gen_rand_obs(dim=(2, 2)):
+    rand_matrix = (torch.rand(dim, dtype=torch.cfloat) * 2 - 1).numpy()
+    rand_obs = (rand_matrix.conj().T + rand_matrix) / 2
+    eigen_val = np.linalg.eigvalsh(rand_obs)
+    rand_obs = rand_obs / np.max(np.abs(eigen_val))
+    return rand_obs
+
+
+def gen_rand_pauli(dim=(2, 2)):
+    paulis = ['I', 'X', 'Y', 'Z']
+    pauli_str = np.random.choice(paulis)
+    return Pauli(pauli_str).to_matrix()
 
 
 def model_summary(model):

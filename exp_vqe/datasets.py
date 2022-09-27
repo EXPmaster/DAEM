@@ -1,5 +1,6 @@
 import argparse
 import os
+import functools
 import pickle
 import torch
 import torch.nn.functional as F
@@ -12,7 +13,9 @@ from tqdm import tqdm
 from qiskit.providers.aer import AerSimulator
 from qiskit.providers.aer.noise import NoiseModel
 import qiskit.providers.aer.noise as noise
+from qiskit.quantum_info.operators import Operator
 
+from utils import gen_rand_pauli
 from my_envs import IBMQEnv, stable_softmax
 
 
@@ -21,14 +24,16 @@ class SurrogateDataset(Dataset):
     def __init__(self, data_path):
         with open(data_path, 'rb') as f:
             data_dict = pickle.load(f)
+        self.vqe_params = data_dict['vqe_param']
         self.probabilities = data_dict['probability']
         self.observables = data_dict['observable']
         self.ground_truth = data_dict['meas_result']
+        self.positions = data_dict['position']
 
     def __getitem__(self, idx):
-        prs, obs, gts = self.probabilities[idx], self.observables[idx], self.ground_truth[idx]
-        obs = np.array([[1.0, 0.0], [0.0, -1.0]])
-        return torch.FloatTensor(prs), torch.tensor(obs, dtype=torch.cfloat), torch.FloatTensor([gts])
+        params, prs, obs, pos, gts = self.vqe_params[idx], self.probabilities[idx], self.observables[idx], self.positions[idx], self.ground_truth[idx]
+        # print(params, prs, obs, gts)
+        return torch.FloatTensor([params]), torch.FloatTensor(prs), torch.tensor(obs, dtype=torch.cfloat), torch.tensor(pos), torch.FloatTensor([gts])
 
     def __len__(self):
         return len(self.probabilities)
@@ -36,8 +41,14 @@ class SurrogateDataset(Dataset):
 
 class SurrogateGenerator:
 
-    def __init__(self, env_path, batch_size, itrs=50):
-        self.env = IBMQEnv.load(env_path)
+    def __init__(self, env_root, batch_size, itrs=50):
+        # self.env = IBMQEnv.load(env_path)
+        self.env_list = []
+        for env_name in os.listdir(env_root):
+            param = env_name.replace('.pkl', '').split('_')[-1]
+            env_path = os.path.join(env_root, env_name)
+            env = IBMQEnv(args, circ_path=circuit_path)
+            self.env_list.append((env, param))
         self.num_miti_gates = self.env.count_mitigate_gates()
         self.batch_size = batch_size
         self.itrs = itrs
@@ -52,9 +63,10 @@ class SurrogateGenerator:
             prs = F.softmax(rand_val, dim=-1)
             rand_matrix = torch.randn((self.batch_size, 2, 2), dtype=torch.cfloat)
             obs = torch.bmm(rand_matrix.conj().transpose(-2, -1), rand_matrix)
-            meas = self.env.step(obs.numpy(), prs.numpy(), nums=2000)
+            env, param = np.random.choice(self.env_list)
+            meas = env.step(obs.numpy(), prs.numpy(), nums=2000)
             self.cur_itr += 1
-            return prs, obs, torch.FloatTensor(meas)
+            return param, prs, obs, torch.FloatTensor(meas)
         else:
             self.cur_itr = 0
             raise StopIteration
@@ -67,8 +79,8 @@ class MitigateDataset(Dataset):
             self.dataset = pickle.load(f)
 
     def __getitem__(self, idx):
-        obs, exp_noisy, exp_ideal = self.dataset[idx]
-        return torch.tensor(obs, dtype=torch.cfloat), torch.FloatTensor([exp_noisy]), torch.FloatTensor([exp_ideal])
+        params, obs, pos, exp_noisy, exp_ideal = self.dataset[idx]
+        return torch.FloatTensor([params]), torch.tensor(obs, dtype=torch.cfloat), torch.tensor(pos), torch.FloatTensor([exp_noisy]), torch.FloatTensor([exp_ideal])
 
     def __len__(self):
         return len(self.dataset)
@@ -118,7 +130,7 @@ def gen_mitigation_data_ibmq(args):
     dataset = []
 
     for env_name in os.listdir(env_root):
-        param = env_name.replace('.pkl', '').split('_')[-1]
+        param = float(env_name.replace('.pkl', '').split('_')[-1])
         env_path = os.path.join(env_root, env_name)
         env = IBMQEnv.load(env_path)
         # env.gen_new_circuit_without_id()
@@ -129,23 +141,29 @@ def gen_mitigation_data_ibmq(args):
         # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
 
         # env.backend = AerSimulator(noise_model=noise_model)
-
+        num_qubits = env.circuit.num_qubits
         # print(env.circuit)
         ideal_state = env.simulate_ideal()
         noisy_state = env.simulate_noisy()
         for i in tqdm(range(args.num_data)):
             # rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
             # rand_obs = rand_matrix.conj().T @ rand_matrix
-            rand_matrix = (torch.rand((2, 2), dtype=torch.cfloat) * 2 - 1).numpy()
-            rand_obs = (rand_matrix.conj().T + rand_matrix) / 2
-            eigen_val = np.linalg.eigvalsh(rand_obs)
-            rand_obs = rand_obs / np.max(np.abs(eigen_val))
-            assert (rand_obs < 100).all(), eigen_val
+            rand_obs = [gen_rand_pauli() for i in range(2)]
+            rand_idx = np.random.choice(num_qubits - 1)
+            selected_qubits = [rand_idx, rand_idx + 1]
+            obs = [np.eye(2) for i in range(rand_idx)] + rand_obs +\
+                  [np.eye(2) for i in range(rand_idx + len(selected_qubits), num_qubits)]
+            obs_op = [Operator(o) for o in obs]
+            obs_kron = functools.reduce(np.kron, obs)
+            obs_ret = np.array([obs[rand_idx], obs[rand_idx + 1]])
+            # assert (rand_obs < 100).all(), eigen_val
             # rand_obs = np.diag([1., -1])
-            obs = np.kron(np.eye(2**3), rand_obs)
-            exp_ideal = ideal_state.expectation_value(obs).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
-            exp_noisy = noisy_state.expectation_value(obs).real
-            dataset.append([param, rand_obs, round(exp_noisy, 8), round(exp_ideal, 8)])
+            # obs = np.kron(np.eye(2**3), rand_obs)
+            exp_ideal = ideal_state.expectation_value(obs_kron).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
+            exp_noisy = noisy_state.expectation_value(obs_kron).real
+            # exp_ideal = [round(ideal_state.expectation_value(obs_op[i], qargs=[i]).real, 8) for i in range(num_qubits)]
+            # exp_noisy = [round(noisy_state.expectation_value(obs_op[i], qargs=[i]).real, 8) for i in range(num_qubits)]
+            dataset.append([param, obs_ret, selected_qubits, exp_noisy, exp_ideal])
 
     with open(args.out_path, 'wb') as f:
         pickle.dump(dataset, f)
@@ -158,7 +176,7 @@ if __name__ == '__main__':
     parser.add_argument('--out-path', default='../data_mitigate/vqe.pkl', type=str)
     parser.add_argument('--num-data', default=10_000, type=int)
     args = parser.parse_args()
-    # dataset = SurrogateDataset('../data_surrogate/env1_data.pkl')
+    # dataset = SurrogateDataset('../data_surrogate/env_vqe_data.pkl')
     # print(next(iter(dataset)))
     # dataset = SurrogateGenerator(args.env_path, batch_size=16, itrs=10)
     # for data in dataset:

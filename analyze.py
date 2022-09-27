@@ -9,7 +9,7 @@ if __name__ == '__main__':
     print(len(dataset))
 
     deviations = []
-    for _, obs, exp_noisy, exp_ideal in dataset:
+    for _, obs, _, exp_noisy, exp_ideal in dataset:
         deviations.append(abs(exp_noisy - exp_ideal))
     mean_val = round(np.mean(deviations), 6)
     print('deviation in original dataset: {:.6f}'.format(mean_val))
