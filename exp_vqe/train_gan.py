@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.tensorboard import SummaryWriter
 from qiskit.quantum_info.operators import Pauli
 
@@ -18,19 +19,23 @@ def main(args):
     trainset, testset, train_loader, test_loader = build_dataloader(args, MitigateDataset)
     loss_fn = nn.BCELoss()
     model_s = SurrogateModel(args.num_mitigates).to(args.device)
-    model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
+    # model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
     model_g = Generator(num_qubits=args.num_mitigates).to(args.device)
     model_d = Discriminator(num_qubits=args.num_mitigates).to(args.device)
     optimizer_g = optim.Adam([{'params': model_g.parameters()},
-                            {'params': model_s.parameters(), 'lr': 1e-6}], lr=args.lr)
-    optimizer_d = optim.Adam(model_d.parameters(), lr=args.lr)
+                            {'params': model_s.parameters(), 'lr': args.lr_s}], lr=args.lr_g, betas=(args.beta1, 0.999))
+    optimizer_d = optim.Adam(model_d.parameters(), lr=args.lr_d, betas=(args.beta1, 0.999))
     print('Start training...')
+    scheduler_g = StepLR(optimizer_g, 40, gamma=0.1)
+    scheduler_d = StepLR(optimizer_d, 40, gamma=0.1)
 
     best_metric = 1.0
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_s, model_d, loss_fn, optimizer_g, optimizer_d)
         metric = validate(epoch, args, test_loader, model_g, model_s, loss_fn)
+        scheduler_g.step()
+        scheduler_d.step()
         if metric < best_metric:
             print('Saving model...')
             best_metric = metric
@@ -47,7 +52,7 @@ def main(args):
 
 
 def gen_rand_obs_torch(args):
-    rand_matrix = (torch.rand((args.batch_size, 2, 2), dtype=torch.cfloat) * 2.0 - 1.0).to(args.device)
+    rand_matrix = (torch.rand((args.batch_size, args.num_ops, 2, 2), dtype=torch.cfloat) * 2.0 - 1.0).to(args.device)
     rand_hermitian = (rand_matrix.conj().mT + rand_matrix) / 2
     eigen_vals = torch.linalg.eigvalsh(rand_hermitian)
     rand_obs = rand_hermitian / eigen_vals.abs().max(1, keepdim=True)[0][:, :, None]
@@ -55,10 +60,10 @@ def gen_rand_obs_torch(args):
 
 
 def rand_pauli_torch_generator(args):
-    paulis = torch.from_numpy(np.array([Pauli('I').to_matrix(),
+    paulis = torch.tensor(np.array([Pauli('I').to_matrix(),
                            Pauli('X').to_matrix(),
                            Pauli('Y').to_matrix(),
-                           Pauli('Z').to_matrix()]))
+                           Pauli('Z').to_matrix()]), dtype=torch.cfloat)
     def gen_fn(num_ops=1):
         rand_indices = torch.randint(0, 4, size=(args.batch_size, num_ops))
         return paulis[rand_indices]
@@ -86,10 +91,11 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         # rand_matrix = torch.randn((args.batch_size, 2, 2), dtype=torch.cfloat).to(args.device)
         # rand_hermitian = torch.bmm(rand_matrix.conj().mT, rand_matrix)
         rand_params = (torch.rand((args.batch_size, 1)) * 4 - 2).to(args.device)
-        rand_obs = pauli_generator(2).to(args.device)
+        rand_obs = gen_rand_obs_torch(args)  # pauli_generator(args.num_ops).to(args.device)
         rand_pos = torch.randint(0, args.num_mitigates - 1, size=(args.batch_size, 1)).to(args.device)
         rand_pos = torch.cat((rand_pos, rand_pos + 1), 1)
-
+        
+        rand_params = torch.cat((rand_params[:args.batch_size//2], params[:args.batch_size//2]), 0)
         rand_obs = torch.cat((rand_obs[:args.batch_size//2], obs[:args.batch_size//2]), 0)
         rand_pos = torch.cat((rand_pos[:args.batch_size//2], pos[:args.batch_size//2]), 0)
         labels.fill_(0.0)
@@ -140,17 +146,21 @@ def validate(epoch, args, loader, model_g, model_s, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-path', default='../data_mitigate/trainset_vqe.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/testset_vqe.pkl', type=str)
+    parser.add_argument('--train-path', default='../data_mitigate/trainset_arb.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/testset_arb.pkl', type=str)
     parser.add_argument('--weight-path', default='../runs/env_vqe/model_surrogate.pt', type=str)
     parser.add_argument('--logdir', default='../runs/env_vqe', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=128, type=int)
     parser.add_argument('--num-mitigates', default=6, type=int, help='number of mitigation gates')
+    parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--workers', default=4, type=int, help='dataloader worker nums')
     parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpus', default='0', type=str)
-    parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
+    parser.add_argument('--lr-s', default=2e-4, type=float, help='learning rate for surrogate model')
+    parser.add_argument('--lr-g', default=2e-4, type=float, help='learning rate for generator')
+    parser.add_argument('--lr-d', default=2e-4, type=float, help='learning rate for discriminator')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1 for Adam optimizer')
     parser.add_argument('--nosave', default=False, action='store_true', help='not to save model')
     parser.add_argument('--save-name', default='gan_model.pt', type=str, help='model file name')
     args = parser.parse_args()
@@ -158,9 +168,6 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     # args.writer = SummaryWriter(log_dir=args.logdir)
-    # main(args)
+    main(args)
     # args.writer.flush()
     # args.writer.close()
-
-    generator = rand_pauli_torch_generator(args)
-    print(generator(1).shape)

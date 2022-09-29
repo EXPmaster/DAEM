@@ -15,7 +15,7 @@ from qiskit.providers.aer.noise import NoiseModel
 import qiskit.providers.aer.noise as noise
 from qiskit.quantum_info.operators import Operator
 
-from utils import gen_rand_pauli
+from utils import gen_rand_pauli, gen_rand_obs
 from my_envs import IBMQEnv, stable_softmax
 
 
@@ -148,14 +148,14 @@ def gen_mitigation_data_ibmq(args):
         for i in tqdm(range(args.num_data)):
             # rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
             # rand_obs = rand_matrix.conj().T @ rand_matrix
-            rand_obs = [gen_rand_pauli() for i in range(2)]
-            rand_idx = np.random.choice(num_qubits - 1)
-            selected_qubits = [rand_idx, rand_idx + 1]
+            rand_obs = [gen_rand_obs() for i in range(args.num_ops)]
+            rand_idx = np.random.randint(num_qubits - 1)
+            selected_qubits = list(range(rand_idx, rand_idx + args.num_ops))  # [rand_idx, rand_idx + 1]
             obs = [np.eye(2) for i in range(rand_idx)] + rand_obs +\
                   [np.eye(2) for i in range(rand_idx + len(selected_qubits), num_qubits)]
             obs_op = [Operator(o) for o in obs]
-            obs_kron = functools.reduce(np.kron, obs)
-            obs_ret = np.array([obs[rand_idx], obs[rand_idx + 1]])
+            obs_kron = functools.reduce(np.kron, obs[::-1])
+            obs_ret = np.array(rand_obs)
             # assert (rand_obs < 100).all(), eigen_val
             # rand_obs = np.diag([1., -1])
             # obs = np.kron(np.eye(2**3), rand_obs)
@@ -173,8 +173,9 @@ def gen_mitigation_data_ibmq(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # parser.add_argument('--env-path', default='../environments/swaptest.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/vqe.pkl', type=str)
-    parser.add_argument('--num-data', default=10_000, type=int)
+    parser.add_argument('--out-path', default='../data_mitigate/vqe_arb.pkl', type=str)
+    parser.add_argument('--num-ops', default=2, type=int)
+    parser.add_argument('--num-data', default=60_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env_vqe_data.pkl')
     # print(next(iter(dataset)))
@@ -182,3 +183,7 @@ if __name__ == '__main__':
     # for data in dataset:
     #     print(data)
     gen_mitigation_data_ibmq(args)
+
+    import subprocess
+    command = 'cd .. && python circuit.py --data-name vqe_arb.pkl --train-name trainset_arb.pkl --test-name testset_arb.pkl --split'
+    subprocess.Popen(command, shell=True).wait()

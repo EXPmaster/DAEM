@@ -75,13 +75,13 @@ class Discriminator(nn.Module):
         self.param_embed = nn.Linear(1, hidden_size)
         self.embed_ln = nn.LayerNorm(hidden_size)
         self.discriminator = nn.Sequential(
-            nn.Linear(4 * hidden_size, 256),
-            nn.ReLU(inplace=True),
-            nn.Linear(256, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 1),
+            nn.Linear(4 * hidden_size, 512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(1024, 1024),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(1024, 1),
             nn.Sigmoid()
         )
     
