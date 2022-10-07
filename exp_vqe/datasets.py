@@ -1,7 +1,9 @@
 import argparse
 import os
 import functools
+import itertools
 import pickle
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
@@ -13,7 +15,7 @@ from tqdm import tqdm
 from qiskit.providers.aer import AerSimulator
 from qiskit.providers.aer.noise import NoiseModel
 import qiskit.providers.aer.noise as noise
-from qiskit.quantum_info.operators import Operator
+from qiskit.quantum_info.operators import Operator, Pauli
 
 from utils import gen_rand_pauli, gen_rand_obs
 from my_envs import IBMQEnv, stable_softmax
@@ -85,45 +87,6 @@ class MitigateDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    
-def gen_mitigation_data(args):
-    env = QCircuitEnv.load(args.env_path)
-    output_state = cirq.Simulator().simulate(env.circuit).final_state_vector.reshape(-1, 1)
-    noisy_circuit = env.circuit.with_noise(cirq.depolarize(p=0.01))
-    rho = cirq.DensityMatrixSimulator().simulate(noisy_circuit).final_density_matrix
-    num_qubits = len(env.qubits)
-
-    dataset = []
-    if args.num_data < 1000:
-        dataset = gen_fn(num_qubits, output_state, rho, args.num_data)
-    else:
-        pool = pathos.multiprocessing.Pool(processes=8)
-        data_queue = []
-        for i in range(args.num_data // 1000):
-            data_queue.append(pool.apply_async(gen_fn, args=(num_qubits, output_state, rho, 1000)))
-        pool.close()
-        pool.join()
-        for item in data_queue:
-            dataset += item.get()
-
-    with open(args.out_path, 'wb') as f:
-        pickle.dump(dataset, f)
-    print(f'Generation finished. File saved to {args.out_path}')
-
-
-def gen_fn(num_qubits, output_state, rho, num_samples):
-    data_list = []
-    for i in range(num_samples):
-        rand_matrix = torch.randn((2, 2), dtype=torch.cfloat).numpy()
-        rand_obs = rand_matrix.conj().T @ rand_matrix
-        obs_all = np.kron(rand_obs, np.eye((num_qubits - 1) ** 2))
-        exp_ideal = output_state.conj().T @ obs_all @ output_state
-        exp_ideal = round(exp_ideal.real[0][0], 8)
-        exp_noisy = round(np.trace(obs_all @ rho).real, 8)
-        data_list.append([rand_obs, exp_noisy, exp_ideal])
-
-    return data_list
-
 
 def gen_mitigation_data_ibmq(args):
     env_root = '../environments/vqe_envs'
@@ -170,12 +133,45 @@ def gen_mitigation_data_ibmq(args):
     print(f'Generation finished. File saved to {args.out_path}')
 
 
+def gen_mitigation_data_pauli(args):
+    env_root = '../environments/vqe_envs'
+    dataset = []
+    paulis = [Pauli(x).to_matrix() for x in ('I', 'X', 'Y', 'Z')]
+
+    for env_name in os.listdir(env_root):
+        param = float(env_name.replace('.pkl', '').split('_')[-1])
+        env_path = os.path.join(env_root, env_name)
+        env = IBMQEnv.load(env_path)
+        num_qubits = env.circuit.num_qubits
+        # print(env.circuit)
+        ideal_state = env.simulate_ideal()
+        noisy_state = env.simulate_noisy()
+        for idx in tqdm(range(num_qubits - args.num_ops + 1)):
+            for obs1, obs2 in itertools.product(paulis, paulis):
+                rand_obs = [obs1, obs2]
+                selected_qubits = list(range(idx, idx + args.num_ops))
+                obs = [np.eye(2) for i in range(idx)] + rand_obs +\
+                    [np.eye(2) for i in range(idx + len(selected_qubits), num_qubits)]
+                obs_op = [Operator(o) for o in obs]
+                obs_kron = functools.reduce(np.kron, obs[::-1])
+                obs_ret = np.array(rand_obs)
+                exp_ideal = ideal_state.expectation_value(obs_kron).real  # (ideal_state.conj() @ np.kron(np.eye(2), rand_obs) @ ideal_state).real
+                exp_noisy = noisy_state.expectation_value(obs_kron).real
+                # exp_ideal = [round(ideal_state.expectation_value(obs_op[i], qargs=[i]).real, 8) for i in range(num_qubits)]
+                # exp_noisy = [round(noisy_state.expectation_value(obs_op[i], qargs=[i]).real, 8) for i in range(num_qubits)]
+                dataset.append([param, obs_ret, selected_qubits, exp_noisy, exp_ideal])
+
+    with open(args.out_path, 'wb') as f:
+        pickle.dump(dataset, f)
+    print(f'Generation finished. File saved to {args.out_path}')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--env-path', default='../environments/swaptest.pkl', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/vqe_arb.pkl', type=str)
+    parser.add_argument('--env-root', default='../environments/vqe_envs_train', type=str)
+    parser.add_argument('--out-path', default='../data_mitigate/trainset_arb.pkl', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
-    parser.add_argument('--num-data', default=60_000, type=int)
+    parser.add_argument('--num-data', default=10_000, type=int)
     args = parser.parse_args()
     # dataset = SurrogateDataset('../data_surrogate/env_vqe_data.pkl')
     # print(next(iter(dataset)))
@@ -184,6 +180,6 @@ if __name__ == '__main__':
     #     print(data)
     gen_mitigation_data_ibmq(args)
 
-    import subprocess
-    command = 'cd .. && python circuit.py --data-name vqe_arb.pkl --train-name trainset_arb.pkl --test-name testset_arb.pkl --split'
-    subprocess.Popen(command, shell=True).wait()
+    # import subprocess
+    # command = 'cd .. && python circuit.py --data-name vqe.pkl --train-name trainset_vqe.pkl --test-name testset_vqe.pkl --split'
+    # subprocess.Popen(command, shell=True).wait()

@@ -177,7 +177,7 @@ class IBMQEnv:
 def stable_softmax(x):
     maxval = x.max(-1, keepdims=True)
     x_exp = np.exp(x - maxval)
-    return x_exp / x_exp.sum(-1, keepdims=True)
+    return x_exp / x_exp.sum(-1, keepdims=True) * np.sign(x)
 
 
 def gen_surrogate_dataset(env, data_num_per_run):
@@ -240,8 +240,10 @@ def main(args):
 
 
 def build_env_vqe(args):
-    vqe_circuit_path = '../environments/circuits'
-    save_root = '../environments/vqe_envs'
+    vqe_circuit_path = '../environments/circuits_train'
+    save_root = '../environments/vqe_envs_train'
+    if not os.path.exists(save_root):
+        os.makedirs(save_root)
     for circuit_name in os.listdir(vqe_circuit_path):
         circuit_path = os.path.join(vqe_circuit_path, circuit_name)
         env = IBMQEnv(args, circ_path=circuit_path)
@@ -264,6 +266,6 @@ if __name__ == '__main__':
     # env = IBMQEnv(args)
     # env.save(args.env_path)
     # print(env.circuit)
-    # build_env_vqe(args)
-    main(args)
+    build_env_vqe(args)
+    # main(args)
     

@@ -26,8 +26,8 @@ def main(args):
                             {'params': model_s.parameters(), 'lr': args.lr_s}], lr=args.lr_g, betas=(args.beta1, 0.999))
     optimizer_d = optim.Adam(model_d.parameters(), lr=args.lr_d, betas=(args.beta1, 0.999))
     print('Start training...')
-    scheduler_g = StepLR(optimizer_g, 40, gamma=0.1)
-    scheduler_d = StepLR(optimizer_d, 40, gamma=0.1)
+    scheduler_g = StepLR(optimizer_g, 50, gamma=0.1)
+    scheduler_d = StepLR(optimizer_d, 50, gamma=0.1)
 
     best_metric = 1.0
     for epoch in range(args.epochs):
@@ -75,6 +75,8 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
     model_s.train()
     model_d.train()
     pauli_generator = rand_pauli_torch_generator(args)
+    loss_g_avg = AverageMeter()
+    loss_d_avg = AverageMeter()
 
     for itr, (params, obs, pos, exp_noisy, exp_ideal) in enumerate(loader):
         # Update D to maximize log(D(x)) + log(1 - D(G(z)))
@@ -90,14 +92,15 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         ## fake
         # rand_matrix = torch.randn((args.batch_size, 2, 2), dtype=torch.cfloat).to(args.device)
         # rand_hermitian = torch.bmm(rand_matrix.conj().mT, rand_matrix)
+        
         rand_params = (torch.rand((args.batch_size, 1)) * 4 - 2).to(args.device)
         rand_obs = gen_rand_obs_torch(args)  # pauli_generator(args.num_ops).to(args.device)
         rand_pos = torch.randint(0, args.num_mitigates - 1, size=(args.batch_size, 1)).to(args.device)
         rand_pos = torch.cat((rand_pos, rand_pos + 1), 1)
-        
-        rand_params = torch.cat((rand_params[:args.batch_size//2], params[:args.batch_size//2]), 0)
-        rand_obs = torch.cat((rand_obs[:args.batch_size//2], obs[:args.batch_size//2]), 0)
-        rand_pos = torch.cat((rand_pos[:args.batch_size//2], pos[:args.batch_size//2]), 0)
+        sep_idx = args.batch_size // 3
+        rand_params = torch.cat((rand_params[:sep_idx], params[sep_idx:]), 0)
+        rand_obs = torch.cat((rand_obs[:sep_idx], obs[sep_idx:]), 0)
+        rand_pos = torch.cat((rand_pos[:sep_idx], pos[sep_idx:]), 0)
         labels.fill_(0.0)
         fake = model_s(rand_params, model_g(rand_params, rand_obs, rand_pos), rand_obs, rand_pos)
         output = model_d(fake.detach(), rand_params, rand_obs, rand_pos)
@@ -121,9 +124,14 @@ def train(epoch, args, loader, model_g, model_s, model_d, loss_fn, optimizer_g, 
         lossG.backward()
         optimizer_g.step()
 
+        loss_g_avg.update(lossG.item())
+        loss_d_avg.update(lossD.item())
         if itr % 1000 == 0:
             # args.writer.add_scalar('Loss/train', loss_accumulator.getval(), epoch)
             print('Loss_D: {:.4f}\tLoss_G\t{:.4f}\tD(noisy): {:.4f}\tD(ideal): {:.4f}\tD(G(z)): {:.4f} / {:.4f}'.format(lossD, lossG, D_noisy, D_ideal, D_g_z1, D_g_z2))
+        
+    args.writer.add_scalar('Loss/loss_G', loss_g_avg.getval(), epoch)
+    args.writer.add_scalar('Loss/loss_D', loss_d_avg.getval(), epoch)
 
 
 @torch.no_grad()
@@ -139,7 +147,7 @@ def validate(epoch, args, loader, model_g, model_s, loss_fn):
 
     value = metric.getval()
     # args.writer.add_scalar('Loss/val', losses.getval(), epoch)
-    # args.writer.add_scalar('Abs_deviation/val', value, epoch)
+    args.writer.add_scalar('Abs_deviation/val', value, epoch)
     print('validation absolute deviation: {:.6f}'.format(value))
     return value
 
@@ -147,7 +155,7 @@ def validate(epoch, args, loader, model_g, model_s, loss_fn):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--train-path', default='../data_mitigate/trainset_arb.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/testset_arb.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/vqe_arb_test.pkl', type=str)
     parser.add_argument('--weight-path', default='../runs/env_vqe/model_surrogate.pt', type=str)
     parser.add_argument('--logdir', default='../runs/env_vqe', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
@@ -167,7 +175,7 @@ if __name__ == '__main__':
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    # args.writer = SummaryWriter(log_dir=args.logdir)
+    args.writer = SummaryWriter(log_dir=args.logdir)
     main(args)
-    # args.writer.flush()
-    # args.writer.close()
+    args.writer.flush()
+    args.writer.close()

@@ -1,4 +1,5 @@
 from itertools import product
+import os
 import pickle
 import numpy as np
 import qiskit
@@ -79,6 +80,8 @@ class VQETrainer:
         ref_value = result_np.eigenvalue.real
         print('VQE result: {},\t Calculation result: {}'.format(result_vqe.optimal_value, ref_value))
         if save_path is not None:
+            if np.abs(result_vqe.optimal_value - ref_value) > 1e-3:
+                return False
             bind_ansatz = vqe.ansatz.bind_parameters(result_vqe.optimal_point)
             with open(save_path, 'wb') as f:
                 pickle.dump(bind_ansatz, f)
@@ -89,10 +92,19 @@ class VQETrainer:
 if __name__ == '__main__':
     trainer = VQETrainer(6, 3)
     circuit = trainer.get_circuit()
-    for i, x in enumerate(np.arange(-2.0, 2.0, 0.25)):
+    retry_iters = 100
+    save_root = '../environments/circuits_test'
+    if not os.path.exists(save_root):
+        os.makedirs(save_root)
+    for i, x in enumerate(np.arange(-1.95, 2.0, 0.1)):
+        x = round(x, 2)
         H = trainer.get_hamitonian_ising(x)
-        trainer.train(circuit, H, save_path=f'../environments/circuits/vqe_{x}.pkl')
-
+        for j in range(retry_iters):
+            status = trainer.train(circuit, H, save_path=os.path.join(save_root, f'vqe_{x}.pkl'))
+            if not isinstance(status, bool):
+                break
+            else:
+                print(f'Retry g = {x} for {j+1}/{retry_iters} iters')
 
 
     # H = trainer.get_hamitonian_ising(1.0)

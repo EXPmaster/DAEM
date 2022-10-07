@@ -23,7 +23,7 @@ def build_dataloader(args, dataset):
     trainset = dataset(args.train_path)
     train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True, drop_last=True)
     testset = dataset(args.test_path)
-    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
+    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
 
     return trainset, testset, train_loader, test_loader
 
