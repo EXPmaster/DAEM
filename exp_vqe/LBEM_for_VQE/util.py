@@ -1,91 +1,96 @@
 
 from pickle import LIST, TUPLE
 from typing import List
-import warnings
-warnings.filterwarnings("ignore")
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-from qiskit.chemistry import FermionicOperator
-from qiskit.chemistry.drivers import PySCFDriver, UnitsType
-from qiskit.aqua.operators import Z2Symmetries
+# from qiskit_nature.converters.second_quantization import QubitConverter
+# from qiskit_nature.drivers.second_quantization import PySCFDriver
+# from qiskit_nature.drivers import UnitsType
+# from qiskit_nature.mappers.second_quantization import JordanWignerMapper
+# from qiskit_nature.problems.second_quantization import ElectronicStructureProblem
+# from qiskit.opflow import Z2Symmetries
 from qiskit.algorithms.optimizers import SLSQP,POWELL,SPSA,COBYLA
-from qiskit.circuit.library import TwoLocal
-from qiskit.aqua.algorithms import VQE, NumPyEigensolver
-from qiskit.chemistry.components.initial_states import HartreeFock
-from qiskit.chemistry.components.variational_forms import UCCSD
-from qiskit import IBMQ, BasicAer, Aer
-from qiskit import QuantumCircuit
-from qiskit.circuit import QuantumCircuit, Parameter
+# from qiskit.circuit.library import TwoLocal
+from qiskit.algorithms import VQE, NumPyEigensolver
+# from qiskit_nature.circuit.library import HartreeFock, UCCSD
+from qiskit import QuantumCircuit, Aer
+from qiskit.circuit import Parameter
+from qiskit.opflow import PauliOp
+from qiskit.quantum_info.operators import Operator, Pauli
 
 from qiskit.circuit import ParameterVector, QuantumCircuit
-from expval_calc_q_optim import *
+from .expval_calc_q_optim import *
 from qiskit.utils import QuantumInstance 
 from qiskit.algorithms import optimizers
 
 
 
-def calculate_pauli_hamiltonian(molecule_name, distance ,map_type = 'parity'):
+# def calculate_pauli_hamiltonian(molecule_name, distance ,map_type = 'parity'):
   
-    if molecule_name =='H2':
-        freeze_list = []
-        remove_list = []
-        molecular_coordinates = "H 0 0 0; H 0 0 " + str(distance)
-    elif molecule_name == 'LiH':
-        freeze_list = [0,6]
-        remove_list = [4,8]
-        molecular_coordinates = "Li 0 0 0; H 0 0 " + str(distance)
-    else:
-        raise NotImplementedError
+#     if molecule_name =='H2':
+#         freeze_list = []
+#         remove_list = []
+#         molecular_coordinates = "H 0 0 0; H 0 0 " + str(distance)
+#     elif molecule_name == 'LiH':
+#         freeze_list = [0,6]
+#         remove_list = [4,8]
+#         molecular_coordinates = "Li 0 0 0; H 0 0 " + str(distance)
+#     else:
+#         raise NotImplementedError
 
-    driver = PySCFDriver(molecular_coordinates, unit=UnitsType.ANGSTROM,charge=0,spin=0,basis='sto3g')
-    molecule = driver.run()
-    ferOp = FermionicOperator(h1=molecule.one_body_integrals, h2=molecule.two_body_integrals)
+#     driver = PySCFDriver(molecular_coordinates, unit=UnitsType.ANGSTROM,charge=0,spin=0,basis='sto3g')
+#     molecule = driver.run()
+#     es_problem = ElectronicStructureProblem(driver)
+#     second_q_op = es_problem.second_q_ops()
+#     qubit_converter = QubitConverter(JordanWignerMapper())
+#     ferOp = qubit_converter.convert(second_q_op[0])
+#     # ferOp = FermionicOperator(h1=molecule.one_body_integrals, h2=molecule.two_body_integrals)
 
-    ##  number of oribials and particles
-    num_spin_orbitals = molecule.num_orbitals * 2
-    num_particles = molecule.num_alpha + molecule.num_beta
-    nuclear_repulsion_energy = molecule.nuclear_repulsion_energy
+#     ##  number of oribials and particles
+#     num_spin_orbitals = molecule.num_orbitals * 2
+#     num_particles = molecule.num_alpha + molecule.num_beta
+#     nuclear_repulsion_energy = molecule.nuclear_repulsion_energy
 
-    ## freeze the core orbitals
-    if(freeze_list == []):
-        ferOp_f = ferOp
-        energy_shift = 0
-    else:
-        ferOp_f, energy_shift = ferOp.fermion_mode_freezing(freeze_list)
+#     ## freeze the core orbitals
+#     if(freeze_list == []):
+#         ferOp_f = ferOp
+#         energy_shift = 0
+#     else:
+#         ferOp_f, energy_shift = ferOp.fermion_mode_freezing(freeze_list)
 
-    num_spin_orbitals -= len(freeze_list)
-    num_particles -= len(freeze_list)
+#     num_spin_orbitals -= len(freeze_list)
+#     num_particles -= len(freeze_list)
 
-    ## remove the determined orbitals
-    if(remove_list == []):
-        ferOp_fr = ferOp_f
-    else:
-        ferOp_fr = ferOp_f.fermion_mode_elimination(remove_list)
+#     ## remove the determined orbitals
+#     if(remove_list == []):
+#         ferOp_fr = ferOp_f
+#     else:
+#         ferOp_fr = ferOp_f.fermion_mode_elimination(remove_list)
     
-    num_spin_orbitals -= len(remove_list)
+#     num_spin_orbitals -= len(remove_list)
 
-    ### get  the qubit hamiltonian
-    qubitOp = ferOp_fr.mapping(map_type=map_type)
+#     ### get  the qubit hamiltonian
+#     qubitOp = ferOp_fr.mapping(map_type=map_type)
 
-    ### reduce number of qubits through z2 symmetries
-    if map_type == 'parity':
-        qubitOp_t = Z2Symmetries.two_qubit_reduction(qubitOp, num_particles)
-    else:
-        qubitOp_t = qubitOp
+#     ### reduce number of qubits through z2 symmetries
+#     if map_type == 'parity':
+#         qubitOp_t = Z2Symmetries.two_qubit_reduction(qubitOp, num_particles)
+#     else:
+#         qubitOp_t = qubitOp
     
-    ## process the qubit operator ############
-    qubit_ham = []
-    for coeff,pauli in qubitOp_t.__dict__['_paulis']:
-        if all([p == "I" for p in pauli.to_label()]):
-            identity_coeff = coeff
-            continue
-        qubit_ham.append((coeff,pauli.to_label()))
+#     ## process the qubit operator ############
+#     qubit_ham = []
+#     for coeff,pauli in qubitOp_t.__dict__['_paulis']:
+#         if all([p == "I" for p in pauli.to_label()]):
+#             identity_coeff = coeff
+#             continue
+#         qubit_ham.append((coeff,pauli.to_label()))
 
-    result = {'qubit_operator': qubit_ham,'coeff_identity_pauli': identity_coeff , 'shift':nuclear_repulsion_energy + energy_shift,'num_particles': num_particles,'num_spin_orbitals':num_spin_orbitals,'hf_energy': molecule.hf_energy,'qub_op_with_I':qubitOp_t }
+#     result = {'qubit_operator': qubit_ham,'coeff_identity_pauli': identity_coeff , 'shift':nuclear_repulsion_energy + energy_shift,'num_particles': num_particles,'num_spin_orbitals':num_spin_orbitals,'hf_energy': molecule.hf_energy,'qub_op_with_I':qubitOp_t }
 
-    return result
+#     return result
 
 
 def check_simplification(op1, op2):
@@ -140,7 +145,7 @@ def grouping(final_solution, obs_hamiltonian ):
     return grouped_list
 
   
-def get_ansatz(n,m,ansatz = 'simple'):
+def get_ansatz(n,m,ansatz = 'custom'):
     ## trivial circuit for H2 check might not work properly
     phi = Parameter('phi')
     qc = QuantumCircuit(n)
@@ -152,6 +157,8 @@ def get_ansatz(n,m,ansatz = 'simple'):
         num_par_gate = 1
     elif ansatz == 'num_particle_preserving':
         qc, num_par_gate = n_qubit_A_circuit(n,m)
+    elif ansatz == 'custom':
+        qc, num_par_gate = custom_variational_circuit(n,m)
     else:
         raise NotImplementedError
     return qc, num_par_gate
@@ -179,8 +186,34 @@ def n_qubit_A_circuit(n,m, repeat = 1):
                 index += 1
     
     return qc, index*2
+
+def custom_variational_circuit(num_qubits, num_layers, barriers=True):
+    qc = QuantumCircuit(num_qubits)
+    params = []
+    # initial Euler Rotation Layer
+    for i in range(num_qubits):
+        for _ in range(2):  # two new parameters
+            params.append(Parameter(f'p{len(params):02}'))
+        # rotation with the two new parameters. Don't need the first
+        # z rotation
+        qc.u(params[-2], params[-1], 0, i)
+    if barriers:
+        qc.barrier()
+    for l in range(num_layers):
+        # entangling layer
+        for i in range(num_qubits - 1):
+            qc.cnot(i, i + 1)
+        if barriers:
+            qc.barrier()
+        for i in range(num_qubits):
+            for _ in range(3):
+                params.append(Parameter(f'p{len(params):02}'))
+            qc.u(params[-3], params[-2], params[-1], i)
+        if barriers:
+            qc.barrier()
+    return qc, len(params)
         
-def main(molecule_name: str ,distance: float ,n: int , m: int , ansatz: str) :
+def main_fn(molecule_name: str ,distance: float ,n: int , m: int , ansatz: str) :
     
     """
     n(int): number of orbitals
@@ -189,15 +222,15 @@ def main(molecule_name: str ,distance: float ,n: int , m: int , ansatz: str) :
     ansatz(str): value should be 'simple' or 'num_particle_preserving'
     """
     
-    pauli_ham_dict = calculate_pauli_hamiltonian(molecule_name, distance)
-    qubit_ham = pauli_ham_dict['qubit_operator']
+    # pauli_ham_dict = calculate_pauli_hamiltonian(molecule_name, distance)
+    
+    ansatz, num_par_gates = get_ansatz(n,m,ansatz)
+    pauli_ham_dict = [(1.0, Pauli('ZZIIII').to_label())]
+    qubit_ham = pauli_ham_dict
     optimized = optimize_measurements( [list(term[1]) for term in qubit_ham] )
     group_pauli_op = grouping(optimized,qubit_ham)
-    ansatz, num_par_gates = get_ansatz(n,m,ansatz)
-    pauli_ham_dict['grouped_paulis'] =group_pauli_op
 
-
-    return pauli_ham_dict, [ansatz,num_par_gates]
+    return group_pauli_op, [ansatz,num_par_gates]
 
 #def em_expval()
 

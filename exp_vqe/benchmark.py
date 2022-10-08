@@ -20,6 +20,8 @@ from utils import AverageMeter, abs_deviation, gen_rand_obs
 from my_envs import IBMQEnv
 from datasets import MitigateDataset
 from cdr_trainer import CDRTrainer
+from lbem_trainer import LBEMTrainer
+from zne_trainer import ZNETrainer
 
 
 def run_single_test():
@@ -86,15 +88,26 @@ def evaluation():
     model_g.eval()
     model_s.eval()
 
+    # rand_obs = [gen_rand_obs() for i in range(args.num_obs)]
+    rand_obs = [paulis[-1] for _ in range(args.num_obs)]  # Pauli ZZ
+    # rand_idx = np.random.randint(num_qubits - 1)
+    rand_idx = 0
+    selected_qubits = list(range(rand_idx, rand_idx + args.num_obs))
+    obs = [np.eye(2) for i in range(rand_idx)] + rand_obs +\
+            [np.eye(2) for i in range(rand_idx + len(selected_qubits), 6)]
+    obs_kron = functools.reduce(np.kron, obs[::-1])
+    obsvb = np.array(rand_obs)
     # train CDR
-    with open('../environments/circuits_test/vqe_1.0.pkl', 'rb') as f:
+    with open('../environments/circuits_test/vqe_0.1.pkl', 'rb') as f:
         circuit = pickle.load(f)
-    cdr_model = CDRTrainer(circuit, PauliOp(Pauli('ZZIIII')), noise_model)
-    cdr_model.fit()
+    cdr_model = CDRTrainer(noise_model)
+    cdr_model.fit(circuit, PauliOp(Pauli('IIIIZZ')))
+    # ZNE
+    zne_model = ZNETrainer()
 
     for circ_name in tqdm(os.listdir(args.test_root)):
         param = float(circ_name.replace('.pkl', '').split('_')[-1])
-        if param < 0.5: continue
+        if param < 0.6 or param > 1.6: continue
         circ_path = os.path.join(args.test_root, circ_name)
         with open(circ_path, 'rb') as f:
             circuit = pickle.load(f)
@@ -113,23 +126,16 @@ def evaluation():
         mitigated_diff_gan = []
         raw_diff = []
         mitigated_diff_cdr = []
+        mitigated_diff_zne = []
 
         for i in range(args.test_num):
-            # rand_obs = [gen_rand_obs() for i in range(args.num_obs)]
-            rand_obs = [paulis[-1] for _ in range(args.num_obs)]  # Pauli ZZ
-            # rand_idx = np.random.randint(num_qubits - 1)
-            rand_idx = 0
-            selected_qubits = list(range(rand_idx, rand_idx + args.num_obs))
-            obs = [np.eye(2) for i in range(rand_idx)] + rand_obs +\
-                    [np.eye(2) for i in range(rand_idx + len(selected_qubits), num_qubits)]
-            obs_kron = functools.reduce(np.kron, obs[::-1])
-            obs = np.array(rand_obs)
+            
             meas_ideal = state_vec.expectation_value(obs_kron).real
             meas_noisy = density_matrix.expectation_value(obs_kron).real
             raw_diff.append(abs(meas_ideal - meas_noisy))
             
             # GAN prediction
-            obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
+            obs = torch.tensor(obsvb, dtype=torch.cfloat)[None].to(args.device)
             params = torch.FloatTensor([param])[None].to(args.device)
             pos = torch.tensor(selected_qubits)[None].to(args.device)
             prs = model_g(params, obs, pos)
@@ -140,7 +146,12 @@ def evaluation():
             cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
             mitigated_diff_cdr.append(abs(cdr_predicts[0][0] - meas_ideal))
 
-        eval_results.append((param, np.mean(raw_diff), np.mean(mitigated_diff_gan), np.mean(mitigated_diff_cdr)))
+            # ZNE prediction
+            zne_predicts = zne_model.fit_and_predict(circuit, PauliOp(Pauli('IIIIZZ')))
+            mitigated_diff_zne.append(abs(zne_predicts - meas_ideal))
+
+        eval_results.append((param, np.mean(raw_diff), np.mean(mitigated_diff_gan),
+                             np.mean(mitigated_diff_cdr), np.mean(mitigated_diff_zne)))
 
     eval_results = sorted(eval_results, key=lambda x: x[0])
     eval_results = np.array(eval_results)
@@ -148,14 +159,16 @@ def evaluation():
     raw_results = eval_results[:, 1].ravel()
     miti_results_gan = eval_results[:, 2].ravel()
     miti_results_cdr = eval_results[:, 3].ravel()
+    miti_results_zne = eval_results[:, 4].ravel()
     
 
     fig = plt.figure()
     plt.plot(params, raw_results)
     plt.plot(params, miti_results_gan)
     plt.plot(params, miti_results_cdr)
+    plt.plot(params, miti_results_zne)
     # plt.xscale('log')
-    plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation'])
+    plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
     plt.savefig('../imgs/mitigate_vs_raw.svg')

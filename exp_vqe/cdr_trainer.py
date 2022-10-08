@@ -14,22 +14,21 @@ from sklearn.linear_model import LinearRegression
 
 class CDRTrainer:
 
-    def __init__(self, circuit, observable, noise_model):
-        self.circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
-        self.observable = observable
+    def __init__(self, noise_model):
         self.noisy_backend = AerSimulator(noise_model=noise_model)
 
-    def fit(self):
+    def fit(self, circuit, observable):
+        circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
         training_circuits = generate_training_circuits(
-            self.circuit,
-            num_training_circuits=100,
-            fraction_non_clifford=0.3,
+            circuit,
+            num_training_circuits=60,
+            fraction_non_clifford=0.1,
         )
         ideal_results = []
         noisy_results = []
         for circuit in training_circuits:
-            ideal_results.append(self.simulate_ideal(circuit))
-            noisy_results.append(self.simulate_noisy(circuit))
+            ideal_results.append(self._simulate_ideal(circuit, observable))
+            noisy_results.append(self._simulate_noisy(circuit, observable))
         ideal_results = np.array(ideal_results).reshape(-1, 1)
         noisy_results = np.array(noisy_results).reshape(-1, 1)
         self.reg = LinearRegression()
@@ -38,16 +37,16 @@ class CDRTrainer:
     def predict(self, noisy_data):
         return self.reg.predict(noisy_data)
 
-    def simulate_ideal(self, circuit):
+    def _simulate_ideal(self, circuit, observable):
         state_vector = Statevector(circuit)
-        return state_vector.expectation_value(self.observable).real
+        return state_vector.expectation_value(observable).real
         
-    def simulate_noisy(self, circuit):
-        circuit = circuit.copy()
-        circuit.save_density_matrix()
-        noisy_result = self.noisy_backend.run(circuit).result()
+    def _simulate_noisy(self, circuit, observable):
+        tcircuit = circuit.copy()
+        tcircuit.save_density_matrix()
+        noisy_result = self.noisy_backend.run(transpile(tcircuit, self.noisy_backend)).result()
         density_matrix = noisy_result.data()['density_matrix']
-        return density_matrix.expectation_value(self.observable).real
+        return density_matrix.expectation_value(observable).real
 
 
 if __name__ == '__main__':

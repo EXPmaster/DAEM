@@ -1,7 +1,6 @@
-from math import prod
 import qiskit
 import numpy as np
-from generate_training_set import insert_pauli
+from .generate_training_set import insert_pauli
 from qiskit import QuantumCircuit
 from random import sample, seed
 from itertools import product
@@ -189,8 +188,8 @@ def q_optimize(hamiltonian: list, circuits_to_run, com_em: dict, com_ef: dict):
     q = np.dot(np.linalg.inv(a), b)
     return q, extendedP
 
-def test(ansatz, angles, hamiltonian, q, ef_instance, em_instance):
-    boundansatz = ansatz.bind_parameters(angles)
+def test(ansatz, hamiltonian, q, ef_instance, em_instance):
+    boundansatz = ansatz
 
     ef_expval = 0
     em_expval = 0
@@ -207,8 +206,8 @@ def test(ansatz, angles, hamiltonian, q, ef_instance, em_instance):
         noisy_hardware_circuits.append((('noisy', coi), noisy))
         for p in q[1]:
             if p != 'q0':
-                pauli_inserted = insert_pauli(ansatz, p)
-                pauli_inserted = pauli_inserted.bind_parameters(angles)
+                pauli_inserted = insert_pauli(boundansatz, p)
+                # pauli_inserted = pauli_inserted.bind_parameters(angles)
                 pauli_inserted = pauli_inserted.compose(measurement_circuit) # 
                 pauli_inserted.measure_all()
                 noisy_hardware_circuits.append(((p, coi), pauli_inserted))

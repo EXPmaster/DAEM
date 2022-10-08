@@ -1,4 +1,4 @@
-from qiskit import *
+from qiskit import QuantumCircuit, QuantumRegister
 
 default_clifford_list = ['I','X','Y','Z','S','XS','YS','ZS','H','XH','YH','ZH','SH','XSH','YSH','ZSH','HS','XHS','YHS','ZHS','SHS','XSHS','YSHS','ZSHS']
 pauli_list = ['I','X','Y','Z']
@@ -24,14 +24,16 @@ def insert_pauli(qc, pauli):
     new_circuit = QuantumCircuit(qc.width())
  
     for args in qc.data:
-        if args[0].is_parameterized():
+        # if args[0].is_parameterized():
+        if args[0].name == 'u':
             qubit_idx = args[1][0].index
             new_circuit.pauli(pauli[0], [qubit_idx])
-            new_circuit.data.append(args)
+            new_circuit.append(args[0], [qubit_idx])
             pauli = pauli[1:]
         else:
-            new_circuit.data.append(args)
- 
+            # new_circuit.data.append(args)
+            qubit_idx = [args[1][i].index for i in range(len(args[1]))]
+            new_circuit.append(args[0], qubit_idx)
     return new_circuit
 
 def get_pauli_comb(n):
