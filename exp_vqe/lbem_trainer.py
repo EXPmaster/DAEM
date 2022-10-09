@@ -10,12 +10,14 @@ from qiskit.quantum_info import Statevector
 from qiskit.opflow import PauliOp
 from qiskit.utils import QuantumInstance
 from qiskit.circuit import ParameterVector
+from tqdm import tqdm
+from sklearn.linear_model import LinearRegression
 
 from LBEM_for_VQE.util import main_fn
 from LBEM_for_VQE.expval_calc_q_optim import truncate_training_set, expval_calc, q_optimize, test
 from LBEM_for_VQE.generate_training_set import get_circuits_dict, insert_pauli
 
-from ibmq_circuit_transformer import TransformToClifford, add_miti_gates_to_circuit2
+from ibmq_circuit_transformer import TransformToClifford, TransformCircWithIndex, add_miti_gates_to_circuit2
 
 
 class LBEMTrainer:
@@ -59,25 +61,70 @@ class LBEMTrainer2:
         self.ideal_backend = AerSimulator()
         self.group_pauli_op = None
         self.clifford_tsfm = TransformToClifford()
-        self.q = None
+        self.reg = None
 
-    def fit(self, circuit, num_train=1000, num_pauli=100):
-        clifford_circuit = self.clifford_tsfm(circuit)
-        clifford_circuit_with_miti_gates = add_miti_gates_to_circuit2(clifford_circuit)
-        assert False
+    def fit(self, circuit, observable, num_train=1000):
+        noisy_data = []
+        ground_truth = []
+        num = 0
+        pbar = tqdm(total=num_train)
+        while num < num_train:
+            clifford_circuit = self.clifford_tsfm(circuit)
+            gt = self.simulate_ideal(clifford_circuit, observable)
+            if abs(gt) < 0.3: continue
+            ground_truth.append(gt)
+            clifford_circuit_with_miti_gates = add_miti_gates_to_circuit2(clifford_circuit)
+            noisy_data.append(self.noisy_measure(clifford_circuit_with_miti_gates, observable))
+            num += 1
+            pbar.update(1)
+        noisy_data = np.array(noisy_data)
+        ground_truth = np.array(ground_truth).reshape(-1, 1)
+
+        self.reg = LinearRegression()
+        self.reg.fit(noisy_data, ground_truth)
         with open('q_data.pkl', 'wb') as f:
-            pickle.dump((self.q, self.group_pauli_op), f)
+            pickle.dump(self.reg, f)
     
-    def predict(self, circuit):
-        if self.q is None:
+    def predict(self, circuit, observable):
+        if self.reg is None:
             try:
                 with open('q_data.pkl', 'rb') as f:
-                    self.q, self.group_pauli_op = pickle.load(f)
+                    self.reg = pickle.load(f)
             except Exception as e:
                 raise e
-        ef_expval, em_expval, n_expval = test(circuit, self.group_pauli_op, self.q, self.ef_instance, self.em_instance)
-        return em_expval
+        circuit = add_miti_gates_to_circuit2(circuit)
+        noisy_data = self.noisy_measure(circuit, observable)
+        noisy_data = np.array(noisy_data).reshape(1, -1)
+        em_result = self.reg.predict(noisy_data)
+        return em_result[0][0]
+    
+    def simulate_ideal(self, circuit, observable):
+        state_vector = Statevector(circuit)
+        return state_vector.expectation_value(observable).real
+    
+    def noisy_measure(self, miti_circuit, observable, shots_per_sim=100):
+        """ Build mitigation circuits and measure them. """
+        tsfm = TransformCircWithIndex()
+        miti_circuit.save_density_matrix()
+        num_miti_gates = self.count_mitigate_gates(miti_circuit)
+        table_size = len(tsfm.basis_ops) ** num_miti_gates
+        # print(mitigation_circuit)
+        # print(table_size)
+        results = []
+        for i in range(table_size):
+            circuit = tsfm(miti_circuit, i)
+            t_circuit = transpile(circuit, self.noisy_backend)
+            result_noisy = self.noisy_backend.run(t_circuit, shots=shots_per_sim).result()
+            density_matrix = result_noisy.data()['density_matrix']
+            results.append(density_matrix.expectation_value(observable).real)
 
+        return np.array(results)
+    
+    def count_mitigate_gates(self, circuit):
+        num = 0
+        for item in circuit:
+            num += item[0].label == 'miti'
+        return num
 
 if __name__ == '__main__':
     # from circuit_lib import random_circuit
@@ -100,9 +147,9 @@ if __name__ == '__main__':
     obs = [np.eye(2) for i in range(rand_idx)] + rand_obs +\
             [np.eye(2) for i in range(rand_idx + len(selected_qubits), 6)]
     obs_kron = functools.reduce(np.kron, obs[::-1])
-    trainer = LBEMTrainer(noise_model)
-    trainer.fit(circuit, 100, 2000)
-    print(trainer.predict(circuit))
+    trainer = LBEMTrainer2(noise_model)
+    trainer.fit(circuit, obs_kron, 1200)
+    print(trainer.predict(circuit, obs_kron))
     
     state_vector = Statevector(circuit)
     exp = state_vector.expectation_value(obs_kron).real

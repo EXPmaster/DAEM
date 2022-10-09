@@ -20,7 +20,7 @@ from utils import AverageMeter, abs_deviation, gen_rand_obs
 from my_envs import IBMQEnv
 from datasets import MitigateDataset
 from cdr_trainer import CDRTrainer
-from lbem_trainer import LBEMTrainer
+from lbem_trainer import LBEMTrainer2
 from zne_trainer import ZNETrainer
 
 
@@ -104,6 +104,8 @@ def evaluation():
     cdr_model.fit(circuit, PauliOp(Pauli('IIIIZZ')))
     # ZNE
     zne_model = ZNETrainer()
+    # LBEM
+    lbem_model = LBEMTrainer2(noise_model)
 
     for circ_name in tqdm(os.listdir(args.test_root)):
         param = float(circ_name.replace('.pkl', '').split('_')[-1])
@@ -127,6 +129,7 @@ def evaluation():
         raw_diff = []
         mitigated_diff_cdr = []
         mitigated_diff_zne = []
+        mitigated_diff_lbem = []
 
         for i in range(args.test_num):
             
@@ -144,14 +147,20 @@ def evaluation():
             
             # CDR prediction
             cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
-            mitigated_diff_cdr.append(abs(cdr_predicts[0][0] - meas_ideal))
+            mitigated_diff_cdr.append(abs(cdr_predicts - meas_ideal))
 
             # ZNE prediction
             zne_predicts = zne_model.fit_and_predict(circuit, PauliOp(Pauli('IIIIZZ')))
             mitigated_diff_zne.append(abs(zne_predicts - meas_ideal))
 
+            # LBEM prediction
+            lbem_predicts = lbem_model.predict(circuit, PauliOp(Pauli('IIIIZZ')))
+            mitigated_diff_lbem.append(abs(lbem_predicts - meas_ideal))
+
+
         eval_results.append((param, np.mean(raw_diff), np.mean(mitigated_diff_gan),
-                             np.mean(mitigated_diff_cdr), np.mean(mitigated_diff_zne)))
+                             np.mean(mitigated_diff_cdr), np.mean(mitigated_diff_zne),
+                             np.mean(mitigated_diff_lbem)))
 
     eval_results = sorted(eval_results, key=lambda x: x[0])
     eval_results = np.array(eval_results)
@@ -160,18 +169,22 @@ def evaluation():
     miti_results_gan = eval_results[:, 2].ravel()
     miti_results_cdr = eval_results[:, 3].ravel()
     miti_results_zne = eval_results[:, 4].ravel()
-    
+    miti_results_lbem = eval_results[:, 5].ravel()
 
     fig = plt.figure()
-    plt.plot(params, raw_results)
+    # plt.plot(params, raw_results)
     plt.plot(params, miti_results_gan)
     plt.plot(params, miti_results_cdr)
     plt.plot(params, miti_results_zne)
+    plt.plot(params, miti_results_lbem)
     # plt.xscale('log')
-    plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation', 'ZNE mitigation'])
+    # plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation', 'ZNE mitigation',
+    #             'LBEM mitigation'])
+    plt.legend(['GAN mitigation', 'CDR mitigation', 'ZNE mitigation',
+                'LBEM mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/mitigate_vs_raw.svg')
+    plt.savefig('../imgs/mitigate.svg')
 
 
 if __name__ == '__main__':

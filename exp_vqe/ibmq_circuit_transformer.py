@@ -80,7 +80,7 @@ class TransformCircWithIndex(TransformationPass):
         # iterate over all operations
         for node in dag.op_nodes():
             # if we hit a RYY or RZZ gate replace it
-            if node.op.name == 'id':
+            if node.op.label == 'miti':
                 cur_idx = idx % len(self.basis_ops)
                 gate = self.basis_ops[cur_idx]
                 # calculate the replacement
@@ -206,7 +206,7 @@ def add_miti_gates_to_circuit(circuit):
                 mitigate_layer.add_qreg(canonical_register)
                 
                 for qubit in node_qargs:
-                    mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+                    mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
                 
                 new_dag.compose(mitigate_layer, qubits=order)
                 new_dag.compose(subdag, qubits=order)
@@ -217,7 +217,7 @@ def add_miti_gates_to_circuit(circuit):
     mitigate_layer = DAGCircuit()
     mitigate_layer.add_qreg(canonical_register)
     for qubit in new_dag.qubits:
-        mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+        mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
     new_dag.compose(mitigate_layer, qubits=new_dag.qubits)
     new_circuit = dag_to_circuit(new_dag)
 
@@ -240,13 +240,13 @@ def add_miti_gates_to_circuit2(circuit):
     for layer in dag.serial_layers():
         subdag = layer['graph']
         for node in subdag.op_nodes():
-            if node.name != 'barrier':
+            if node.name != 'barrier' and len(node.qargs) > 1 and np.random.rand() > 1.0:
                 node_qargs = node.qargs
                 mitigate_layer = DAGCircuit()
                 mitigate_layer.add_qreg(canonical_register)
                 
                 for qubit in node_qargs:
-                    mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+                    mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
                 
                 new_dag.compose(mitigate_layer, qubits=order)
                 new_dag.compose(subdag, qubits=order)
@@ -256,7 +256,8 @@ def add_miti_gates_to_circuit2(circuit):
     mitigate_layer = DAGCircuit()
     mitigate_layer.add_qreg(canonical_register)
     for qubit in new_dag.qubits:
-        mitigate_layer.apply_operation_back(IGate(), qargs=[qubit], cargs=[])
+        if qubit.index > 1: break
+        mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
     new_dag.compose(mitigate_layer, qubits=new_dag.qubits)
     new_circuit = dag_to_circuit(new_dag)
 

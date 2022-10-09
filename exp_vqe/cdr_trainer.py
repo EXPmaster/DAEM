@@ -35,7 +35,7 @@ class CDRTrainer:
         self.reg.fit(noisy_results, ideal_results)
     
     def predict(self, noisy_data):
-        return self.reg.predict(noisy_data)
+        return self.reg.predict(noisy_data)[0][0]
 
     def _simulate_ideal(self, circuit, observable):
         state_vector = Statevector(circuit)
