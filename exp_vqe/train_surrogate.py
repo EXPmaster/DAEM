@@ -14,6 +14,7 @@ from datasets import SurrogateGenerator, SurrogateDataset
 def main(args):
     # loader = SurrogateGenerator(args.env_path, args.batch_size)
     trainset, testset, train_loader, test_loader = build_dataloader(args, SurrogateDataset)
+    print(len(trainset))
     loss_fn = nn.MSELoss()
     print(f'Model type: {args.model_type}.')
     num_mitigates = 6
@@ -21,7 +22,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     print('Start training...')
 
-    best_metric = 0.075
+    best_metric = 0.06
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model, loss_fn, optimizer)
@@ -36,10 +37,12 @@ def main(args):
 def train(epoch, args, loader, model, loss_fn, optimizer):
     model.train()
     loss_accumulator = AverageMeter()
-    for itr, (params, prs, obs, pos, gts) in enumerate(loader):
-        params, prs, obs, pos, gts = params.to(args.device), prs.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
+    for itr, (params, prs, obs, pos, noise_scale, gts) in enumerate(loader):
+        params, prs, obs = params.to(args.device), prs.to(args.device), obs.to(args.device)
+        pos, gts = pos.to(args.device), gts.to(args.device)
+        noise_scale = noise_scale.to(args.device)
         optimizer.zero_grad()
-        predicts = model(params, prs, obs, pos)
+        predicts = model(params, prs, obs, pos, noise_scale)
         loss = loss_fn(predicts, gts)
         loss_accumulator.update(loss)
         loss.backward()
@@ -54,9 +57,11 @@ def validate(epoch, args, loader, model, loss_fn):
     model.eval()
     metric = AverageMeter()
     loader.cur_itr = 30
-    for itr,(params, prs, obs, pos, gts) in enumerate(loader):
-        params, prs, obs, pos, gts = params.to(args.device), prs.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
-        predicts = model(params, prs, obs, pos)
+    for itr,(params, prs, obs, pos, noise_scale, gts) in enumerate(loader):
+        params, prs, obs = params.to(args.device), prs.to(args.device), obs.to(args.device)
+        pos, gts = pos.to(args.device), gts.to(args.device)
+        noise_scale = noise_scale.to(args.device)
+        predicts = model(params, prs, obs, pos, noise_scale)
         metric.update(abs_deviation(predicts, gts))
 
     value = metric.getval()
@@ -70,14 +75,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--train-path', default='../data_surrogate/env_vqe_data.pkl', type=str)
     parser.add_argument('--test-path', default='../data_surrogate/env_vqe_test.pkl', type=str)
-    parser.add_argument('--env-path', default='../environments/swaptest.pkl', type=str)
-    parser.add_argument('--logdir', default='../runs/env_vqe', type=str, help='path to save logs and models')
+    parser.add_argument('--logdir', default='../runs/env_vqe_noef', type=str, help='path to save logs and models')
     parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--workers', default=4, type=int, help='dataloader worker nums')
     parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--gpus', default='0', type=str)
-    parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
+    parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus

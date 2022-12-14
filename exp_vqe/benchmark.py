@@ -109,7 +109,7 @@ def evaluation():
 
     for circ_name in tqdm(os.listdir(args.test_root)):
         param = float(circ_name.replace('.pkl', '').split('_')[-1])
-        if param < 0.6 or param > 1.6: continue
+        if param < 0.6 or param > 1.35: continue
         circ_path = os.path.join(args.test_root, circ_name)
         with open(circ_path, 'rb') as f:
             circuit = pickle.load(f)
@@ -172,19 +172,19 @@ def evaluation():
     miti_results_lbem = eval_results[:, 5].ravel()
 
     fig = plt.figure()
-    # plt.plot(params, raw_results)
+    plt.plot(params, raw_results)
     plt.plot(params, miti_results_gan)
-    plt.plot(params, miti_results_cdr)
+    # plt.plot(params, miti_results_cdr)
     plt.plot(params, miti_results_zne)
     plt.plot(params, miti_results_lbem)
     # plt.xscale('log')
     # plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation', 'ZNE mitigation',
     #             'LBEM mitigation'])
-    plt.legend(['GAN mitigation', 'CDR mitigation', 'ZNE mitigation',
+    plt.legend(['w/o mitigation', 'GAN mitigation', 'ZNE mitigation',
                 'LBEM mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/mitigate.svg')
+    plt.savefig('../imgs/mitigate_vs_raw.svg')
 
 
 if __name__ == '__main__':

@@ -197,28 +197,28 @@ def add_miti_gates_to_circuit(circuit):
     current_layout = trivial_layout.copy()
     order = current_layout.reorder_bits(new_dag.qubits)
 
-    for layer in dag.serial_layers():
+    for i, layer in enumerate(dag.serial_layers()):
         subdag = layer['graph']
         for node in subdag.op_nodes():
             node_qargs = node.qargs
-            if len(node_qargs) > 1 and np.random.rand() > 1.0:
+            if i < circuit.num_qubits:  # len(node_qargs) > 1 and np.random.rand() > 1.0:
                 mitigate_layer = DAGCircuit()
                 mitigate_layer.add_qreg(canonical_register)
                 
                 for qubit in node_qargs:
                     mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
                 
-                new_dag.compose(mitigate_layer, qubits=order)
                 new_dag.compose(subdag, qubits=order)
+                new_dag.compose(mitigate_layer, qubits=order)
                 # new_dag.compose(mitigate_layer, qubits=order)
             else:
                 new_dag.compose(subdag, qubits=order)
 
-    mitigate_layer = DAGCircuit()
-    mitigate_layer.add_qreg(canonical_register)
-    for qubit in new_dag.qubits:
-        mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
-    new_dag.compose(mitigate_layer, qubits=new_dag.qubits)
+    # mitigate_layer = DAGCircuit()
+    # mitigate_layer.add_qreg(canonical_register)
+    # for qubit in new_dag.qubits:
+    #     mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
+    # new_dag.compose(mitigate_layer, qubits=new_dag.qubits)
     new_circuit = dag_to_circuit(new_dag)
 
     return new_circuit
