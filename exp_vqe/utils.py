@@ -23,7 +23,7 @@ def build_dataloader(args, dataset):
     trainset = dataset(args.train_path)
     train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True, drop_last=True)
     testset = dataset(args.test_path)
-    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True)
+    test_loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
 
     return trainset, testset, train_loader, test_loader
 
@@ -85,9 +85,9 @@ def partial_trace(rho, keep, dims, optimize=False):
     Nkeep = np.prod(dims[keep])
 
     idx1 = [i for i in range(Ndim)]
-    idx2 = [Ndim+i if i in keep else i for i in range(Ndim)]
-    rho_a = rho.reshape(np.tile(dims,2))
-    rho_a = np.einsum(rho_a, idx1+idx2, optimize=optimize)
+    idx2 = [Ndim + i if i in keep else i for i in range(Ndim)]
+    rho_a = rho.reshape(np.tile(dims, 2))
+    rho_a = np.einsum(rho_a, idx1 + idx2, optimize=optimize)
     return rho_a.reshape(Nkeep, Nkeep)
 
 

@@ -48,7 +48,7 @@ class ZNETrainer:
 
 
 if __name__ == '__main__':
-    with open('../environments/circuits_test/vqe_1.5.pkl', 'rb') as f:
+    with open('../environments/circuits_test_4l/vqe_0.4.pkl', 'rb') as f:
         circuit = pickle.load(f)
 
     noise_model = NoiseModel()
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
     noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
 
-    obs = PauliOp(Pauli('IIIIZZ'))
+    obs = PauliOp(Pauli('IIZZ'))
     zne_model = ZNETrainer()
     mitigated_result = zne_model.fit_and_predict(circuit, obs)
     ideal_result = zne_model.simulate_ideal(circuit, obs)

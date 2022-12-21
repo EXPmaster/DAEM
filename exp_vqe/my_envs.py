@@ -56,7 +56,7 @@ class IBMQEnv:
                 noise_model = NoiseModel()
                 error_1 = noise.depolarizing_error(i, 1)  # single qubit gates
                 error_2 = noise.depolarizing_error(i, 2)
-                noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+                noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
                 noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
                 self.backends[i] = AerSimulator(noise_model=noise_model)
 
@@ -76,7 +76,7 @@ class IBMQEnv:
             circuit = self.miti_circuit
         num = 0
         for item in circuit:
-            num += item[0].name == 'id'
+            num += item[0].label == 'miti'
         return num
 
     def build_state_table(self, shots_per_sim=500):
@@ -87,18 +87,16 @@ class IBMQEnv:
         mitigation_circuit.save_density_matrix()
         num_identity = self.count_mitigate_gates(mitigation_circuit)
         table_size = len(tsfm.basis_ops) ** num_identity
+        backend = self.backends[0.01]
 
-        lut_states = {}  # noise_scale: density_matrices
-        for noise_scale, backend in self.backends.items():
-            lut = []
-            for i in tqdm(range(table_size)):
-                circuit = tsfm(mitigation_circuit, i)
-                t_circuit = transpile(circuit, backend)
-                result_noisy = backend.run(t_circuit, shots=shots_per_sim).result()
-                lut.append(result_noisy.data()['density_matrix'])
-            lut_states[noise_scale] = np.stack(lut)
+        lut = []
+        for i in tqdm(range(table_size)):
+            circuit = tsfm(mitigation_circuit, i)
+            t_circuit = transpile(circuit, backend)
+            result_noisy = backend.run(t_circuit, shots=shots_per_sim).result()
+            lut.append(result_noisy.data()['density_matrix'])
 
-        return lut_states
+        return np.stack(lut)
 
     def step(self, noise_scale, obs_batch, p_batch):
         # cum_p_batch = np.cumsum(p_batch, -1)
@@ -151,7 +149,7 @@ class IBMQEnv:
         results = backend.run(t_circuit, shots=shots).result()
         return results.data()['density_matrix']
     
-    def sample_noisy(self, noise_scale, pauli, shots=500):
+    def sample_noisy(self, noise_scale, pauli, shots=1000):
         backend = self.backends[noise_scale]
         circuit = self.circuit.copy()
         cr = ClassicalRegister(circuit.num_qubits)
@@ -311,8 +309,8 @@ def main(args):
 
 
 def build_env_vqe(args):
-    vqe_circuit_path = '../environments/circuits_train'
-    save_root = '../environments/vqe_envs_train'
+    vqe_circuit_path = '../environments/circuits_test_4l'
+    save_root = '../environments/vqe_envs_test_4l'
     if not os.path.exists(save_root):
         os.makedirs(save_root)
     for circuit_name in os.listdir(vqe_circuit_path):
@@ -337,6 +335,6 @@ if __name__ == '__main__':
     # env = IBMQEnv(args)
     # env.save(args.env_path)
     # print(env.circuit)
-    # build_env_vqe(args)
-    main(args)
+    build_env_vqe(args)
+    # main(args)
     

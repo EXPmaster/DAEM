@@ -90,13 +90,14 @@ class VQETrainer:
 
 
 if __name__ == '__main__':
-    trainer = VQETrainer(6, 3)
+    trainer = VQETrainer(4, 2)
     circuit = trainer.get_circuit()
     retry_iters = 100
-    save_root = '../environments/circuits_test'
+    save_root = '../environments/circuits_test_4l'
     if not os.path.exists(save_root):
         os.makedirs(save_root)
-    for i, x in enumerate(np.arange(-1.95, 2.0, 0.1)):
+    # for i, x in enumerate(np.arange(-1.95, 2.0, 0.1)):
+    for i, x in enumerate(np.arange(0.4, 2.0, 0.2)):
         x = round(x, 2)
         H = trainer.get_hamitonian_ising(x)
         for j in range(retry_iters):

@@ -92,7 +92,7 @@ class MitigateDataset(Dataset):
 
     def __getitem__(self, idx):
         param, obs, pos, noise_scale, exp_noisy, exp_ideal = self.dataset[idx]
-        param_converted = int((param + 0.2) * 5)
+        param_converted = int((param - 0.5) * 5)
         obs_kron = np.kron(obs[0], obs[1])
         return (
             torch.FloatTensor([param]),
@@ -166,15 +166,20 @@ def gen_mitigation_data_pauli(args):
                 obs_ret = np.array(rand_obs)
                 exp_ideal = ideal_state.expectation_value(obs).real
                 for noise_scale in np.round(np.arange(0.01, 0.11, 0.01), 2): # 10
-                    # rho = env.simulate_noisy(0.01)
+                    # noise_scale = 0.01
+                    # rho = env.simulate_noisy(noise_scale)
                     # exp_noisy = rho.expectation_value(obs).real
-                    # partial_rho = partial_trace(rho, selected_qubits, [2] * num_qubits)
-                    # exp_2 = np.trace(partial_rho @ np.kron(obs_ret[0], obs_ret[1])).real
-                    # print(exp_noisy, exp_2)
+                    # exp_s = env.sample_noisy(noise_scale, obs)
+                    # rho_p = partial_trace(env.state_table[0], selected_qubits, [2] * num_qubits)
+                    # exp_2 = np.trace(rho_p @ np.kron(obs_ret[0], obs_ret[1])).real
+                    # print(exp_noisy, exp_s, exp_2, exp_ideal)
                     # assert False
+
+                    exp_noisy = env.simulate_noisy(noise_scale).expectation_value(obs).real
                     for _ in range(100):
-                        exp_noisy = env.sample_noisy(noise_scale, obs)
-                        dataset.append([param, obs_ret, selected_qubits, noise_scale, exp_noisy, round(exp_ideal, 6)])
+                        # sample_noisy = env.sample_noisy(noise_scale, obs)
+                        sample_noisy = np.random.normal(exp_noisy, 0.001)
+                        dataset.append([param, obs_ret, selected_qubits, noise_scale, round(sample_noisy, 6), round(exp_ideal, 6)])
     with open(args.out_path, 'wb') as f:
         pickle.dump(dataset, f)
     print(f'Generation finished. File saved to {args.out_path}')
@@ -182,8 +187,8 @@ def gen_mitigation_data_pauli(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-root', default='../environments/vqe_envs_train', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/dataset.pkl', type=str)
+    parser.add_argument('--env-root', default='../environments/vqe_envs_train_4l', type=str)
+    parser.add_argument('--out-path', default='../data_mitigate/dataset_vqe4l.pkl', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--num-data', default=20_000, type=int)  # 5000 for train
     args = parser.parse_args()

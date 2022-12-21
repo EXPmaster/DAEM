@@ -47,14 +47,13 @@ class SurrogateModel(nn.Module):
 
 class Generator(nn.Module):
 
-    def __init__(self, num_qubits, hidden_size=128):
+    def __init__(self, num_miti, hidden_size=64):
         super().__init__()
-        self.num_qubits = num_qubits
         self.obs_embed = nn.Linear(2 * 2 * 2, hidden_size)
-        self.pos_embed = nn.Embedding(num_qubits, hidden_size)
+        self.pos_embed = nn.Embedding(num_miti, hidden_size)
         self.param_embed = nn.Linear(1, hidden_size)
         self.scale_embed = nn.Linear(1, hidden_size)
-        self.noise_ebd = nn.Linear(128, hidden_size)
+        self.noise_ebd = nn.Linear(64, 256)
         self.embed_ln = nn.LayerNorm(hidden_size)
         # self.net = nn.Sequential(
         #     nn.Linear(5 * hidden_size, 256),
@@ -64,13 +63,13 @@ class Generator(nn.Module):
         #     nn.Linear(512, 4 * num_qubits)
         # )
         self.net = nn.Sequential(
-            nn.Linear(5 * hidden_size, 1024),
-            nn.Mish(inplace=True),
+            nn.Linear(4 * hidden_size + 256, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 1024),
+            nn.ReLU(inplace=True),
             nn.Linear(1024, 2048),
-            nn.Mish(inplace=True),
-            nn.Linear(2048, 4096),
-            nn.Mish(inplace=True),
-            nn.Linear(4096, 4 ** num_qubits)
+            nn.ReLU(inplace=True),
+            nn.Linear(2048, 2 ** num_miti + 1)
         )
 
     def forward(self, noise, params, obs, pos, scale):
@@ -81,19 +80,19 @@ class Generator(nn.Module):
         noise = self.noise_ebd(noise)
         param_ebd = self.param_embed(params)
         scale_ebd = self.scale_embed(scale)
-        x = torch.cat((noise.unsqueeze(1), param_ebd.unsqueeze(1), obs_ebd, scale_ebd.unsqueeze(1)), 1)
+        x = torch.cat((param_ebd.unsqueeze(1), obs_ebd, scale_ebd.unsqueeze(1)), 1)
         x = self.embed_ln(x).flatten(1)
+        x = torch.cat((noise, x), 1)
         x = self.net(x)
         # x = x.view(-1, self.num_qubits, 4)
-        # x = torch.softmax(x, -1)
+        x = torch.softmax(x, -1)
         return x
     
-    def load_envs(self, args):
-        if os.path.exists('tmp.pt'):
+    def load_envs(self, args, force=False):
+        if os.path.exists('tmp.pt') and not force:
             print('Loading from buffer...')
             buffer = torch.load('tmp.pt', map_location='cpu')
-            self.register_buffer('rhos', torch.empty_like(buffer['rhos']))
-            self.load_state_dict(buffer)
+            self.register_buffer('rhos', buffer['rhos'])
         else:
             rhos = {}
             print('Loading envs...')
@@ -101,11 +100,12 @@ class Generator(nn.Module):
                 param = float(env_name.replace('.pkl', '').split('_')[-1])
                 env_path = os.path.join(args.env_path, env_name)
                 env = IBMQEnv.load(env_path)
-                rho = []
-                for i in range(self.num_qubits - 1):
-                    reduced_rho = []
-                    for r in env.state_table[0.01]:
-                        reduced_rho.append(partial_trace(r, [i, i+1], [2] * self.num_qubits))
+                num_qubits = env.circuit.num_qubits
+                rho_0 = env.simulate_noisy(0.01)
+                for i in range(num_qubits - 1):
+                    reduced_rho = [partial_trace(rho_0, [i, i+1], [2] * num_qubits)]
+                    for r in env.state_table:
+                        reduced_rho.append(partial_trace(r, [i, i+1], [2] * num_qubits))
                     reduced_rho = np.array(reduced_rho)
                     rho.append(reduced_rho)
                 rhos[param] = rho
@@ -134,11 +134,11 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self, num_qubits, hidden_size=128):
+    def __init__(self, num_miti, hidden_size=64):
         super().__init__()
-        self.num_qubits = num_qubits
+        self.num_miti = num_miti
         self.obs_embed = nn.Linear(2 * 2 * 2, hidden_size)
-        self.pos_embed = nn.Embedding(num_qubits, hidden_size)
+        self.pos_embed = nn.Embedding(num_miti, hidden_size)
         self.meas_embed = nn.Linear(1, hidden_size)
         self.param_embed = nn.Linear(1, hidden_size)
         self.embed_ln = nn.LayerNorm(hidden_size)
@@ -146,11 +146,11 @@ class Discriminator(nn.Module):
         self.discriminator = nn.Sequential(
             nn.Linear(5 * hidden_size, 512),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 1024),
+            nn.Linear(512, 512),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(1024, 1024),
+            nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(1024, 1),
+            nn.Linear(256, 1),
             nn.Sigmoid()
         )
     

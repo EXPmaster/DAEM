@@ -68,7 +68,8 @@ class TransformCircWithIndex(TransformationPass):
     def __init__(self):
         super().__init__()
         self.basis_ops = [
-            IGate(), XGate(), YGate(), ZGate()
+            XGate(), ZGate()
+            # IGate(), XGate(), YGate(), ZGate()
             # ops.I, ops.X, ops.Y, ops.Z,
             # GateRX(), GateRY(), GateRZ(), GateRYZ(),
             # GateRZX(), GateRXY(), GatePiX(), GatePiY(),
@@ -201,15 +202,16 @@ def add_miti_gates_to_circuit(circuit):
         subdag = layer['graph']
         for node in subdag.op_nodes():
             node_qargs = node.qargs
-            if i < circuit.num_qubits:  # len(node_qargs) > 1 and np.random.rand() > 1.0:
+            if node.name != 'barrier' and len(node_qargs) > 1: # i < circuit.num_qubits * 2:  # len(node_qargs) > 1 and np.random.rand() > 1.0:
                 mitigate_layer = DAGCircuit()
                 mitigate_layer.add_qreg(canonical_register)
                 
                 for qubit in node_qargs:
                     mitigate_layer.apply_operation_back(IGate(label='miti'), qargs=[qubit], cargs=[])
                 
-                new_dag.compose(subdag, qubits=order)
                 new_dag.compose(mitigate_layer, qubits=order)
+                new_dag.compose(subdag, qubits=order)
+                
                 # new_dag.compose(mitigate_layer, qubits=order)
             else:
                 new_dag.compose(subdag, qubits=order)
