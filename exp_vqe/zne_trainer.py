@@ -21,7 +21,7 @@ class ZNETrainer:
 
     def fit_and_predict(self, circuit, observable):
         # folded_circuit = fold_gates_at_random(circuit, 0.5)
-        noise_levels = np.arange(0.01, 0.1, 0.01)
+        noise_levels = np.arange(0.05, 0.2, 0.001)
         noisy_results = []
         for n in noise_levels:
             noise_model = NoiseModel()
@@ -32,7 +32,8 @@ class ZNETrainer:
             noisy_results.append(self.simulate_noisy(circuit, observable, noise_model))
         noisy_results = np.array(noisy_results)
         params = np.polyfit(noise_levels, noisy_results, deg=2)
-        return params[-1]
+        # return params[-1]
+        return params
 
     def simulate_ideal(self, circuit, observable):
         state_vector = Statevector(circuit)
@@ -52,17 +53,18 @@ if __name__ == '__main__':
         circuit = pickle.load(f)
 
     noise_model = NoiseModel()
-    error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
-    error_2 = noise.depolarizing_error(0.01, 2)
+    error_1 = noise.depolarizing_error(0.02, 1)  # single qubit gates
+    error_2 = noise.depolarizing_error(0.02, 2)
     noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
     noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
 
-    obs = PauliOp(Pauli('IIZZ'))
+    obs = PauliOp(Pauli('IIZY'))
     zne_model = ZNETrainer()
     mitigated_result = zne_model.fit_and_predict(circuit, obs)
     ideal_result = zne_model.simulate_ideal(circuit, obs)
     noisy_result = zne_model.simulate_noisy(circuit, obs, noise_model)
     print(mitigated_result, ideal_result, noisy_result)
+    print(abs(mitigated_result - ideal_result))
     # noisy_data = zne_model.simulate_noisy(circuit)
     # noisy_data = np.array(noisy_data).reshape(-1, 1)
     # print(noisy_data.shape)

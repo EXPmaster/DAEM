@@ -12,12 +12,14 @@ from qiskit.quantum_info.operators import Pauli
 
 from model import *
 from utils import AverageMeter, build_dataloader, abs_deviation
-from datasets import MitigateDataset
+from datasets import MitigateDataset, DistDataset
 
 
 def main(args):
-    trainset, testset, train_loader, test_loader = build_dataloader(args, MitigateDataset)
+    trainset, testset, train_loader, test_loader = build_dataloader(args, eval(args.dataset))
+    print(len(trainset))
     loss_fn = nn.BCELoss()
+    # loss_fn = nn.MSELoss()
     # model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
     model_g = Generator(args.num_mitigates)
     model_g.load_envs(args)
@@ -29,7 +31,7 @@ def main(args):
     scheduler_g = StepLR(optimizer_g, 50, gamma=0.5)
     scheduler_d = StepLR(optimizer_d, 50, gamma=0.5)
 
-    best_metric = 0.04
+    best_metric = args.thres
     for epoch in range(args.epochs):
         print(f'=> Epoch {epoch}')
         train(epoch, args, train_loader, model_g, model_d, loss_fn, optimizer_g, optimizer_d)
@@ -138,6 +140,36 @@ def rand_pauli_torch_generator(args):
 #     args.writer.add_scalar('Loss/loss_D', loss_d_avg.getval(), epoch)
 
 
+def train_supervise(epoch, args, loader, model_g, model_d, loss_fn, optimizer_g, optimizer_d):
+    model_g.train()
+    model_d.train()
+    loss_g_avg = AverageMeter()
+
+    for itr, (params, params_cvt, obs, obs_kron, pos, scale, quasi_prob, exp_noisy, _) in enumerate(loader):
+        # Update D to maximize log(D(x)) + log(1 - D(G(z)))
+        ## real
+        params_cvt = params_cvt.to(args.device)
+        params, obs, pos, scale = params.to(args.device), obs.to(args.device), pos.to(args.device), scale.to(args.device)
+        obs_kron = obs_kron.to(args.device)
+        exp_noisy = exp_noisy.to(args.device)
+        quasi_prob = quasi_prob.to(args.device)
+        optimizer_g.zero_grad()
+        noise = torch.randn(args.batch_size, 64, dtype=torch.float, device=args.device)
+        # output = model_g.expectation_from_prs(params_cvt, obs_kron, pos, model_g(noise, params, obs, pos, scale))
+        output = model_g(noise, params, obs, pos, scale)
+        lossG = loss_fn(output, quasi_prob)
+        lossG.backward()
+        # torch.nn.utils.clip_grad_norm_(model_g.parameters(), 5.)
+        optimizer_g.step()
+
+        loss_g_avg.update(lossG.item())
+        if itr % 1000 == 0:
+            # args.writer.add_scalar('Loss/train', loss_accumulator.getval(), epoch)
+            print('Loss_G\t{:.8f}'.format(lossG))
+        
+    args.writer.add_scalar('Loss/loss_G', loss_g_avg.getval(), epoch)
+
+
 def train(epoch, args, loader, model_g, model_d, loss_fn, optimizer_g, optimizer_d):
     model_g.train()
     model_d.train()
@@ -152,29 +184,30 @@ def train(epoch, args, loader, model_g, model_d, loss_fn, optimizer_g, optimizer
         params, obs, pos, scale = params.to(args.device), obs.to(args.device), pos.to(args.device), scale.to(args.device)
         obs_kron = obs_kron.to(args.device)
         exp_noisy = exp_noisy.to(args.device)
+        # quasi_prob = quasi_prob.to(args.device)
         optimizer_d.zero_grad()
-        labels = torch.full((args.batch_size, 1), 0.9, dtype=torch.float, device=args.device)
+        labels = torch.full((args.batch_size, 1), 1., dtype=torch.float, device=args.device)
+        # labels = torch.rand((args.batch_size, 1), dtype=torch.float, device=args.device) * 0.1 + 0.9
         output = model_d(exp_noisy, params, obs, pos, scale)
+        # output = model_d(quasi_prob, params, obs, pos, scale)
         D_ideal = output.mean().item()
         lossD_real = loss_fn(output, labels)
         lossD_real.backward()
 
         ## fake
         noise = torch.randn(args.batch_size, 64, dtype=torch.float, device=args.device)
-        # rand_params = (torch.rand((args.batch_size, 1)) * 4 - 2).to(args.device)
-        # rand_scale = (torch.rand((args.batch_size, 1)) * 0.1).to(args.device)
-        # rand_scale = (torch.rand((args.batch_size, 1)) * (0.1 - 0.01) + 0.01).to(args.device)
-        # sep_idx = args.batch_size // 3
-        # rand_params = torch.cat((rand_params[:sep_idx], params[sep_idx:]), 0)
-        # rand_scale = torch.cat((rand_scale[:sep_idx], scale[sep_idx:]), 0)
         labels.fill_(0.0)
+        rand_scale = (torch.rand((args.batch_size, 1)) * 0.2).to(args.device)
+        sep_idx = args.batch_size // 3
+        scale = torch.cat((rand_scale[:sep_idx], scale[sep_idx:]), 0)
+        # labels = torch.rand((args.batch_size, 1), dtype=torch.float, device=args.device) * 0.1
         fake = model_g.expectation_from_prs(params_cvt, obs_kron, pos, model_g(noise, params, obs, pos, scale))
         # fake = model_g(noise, params, obs, pos, scale)
         output = model_d(fake.detach(), params, obs, pos, scale)
         D_g_z1 = output.mean().item()
         lossD_fake1 = loss_fn(output, labels)
         lossD_fake1.backward()
-        torch.nn.utils.clip_grad_norm_(model_d.parameters(), 5.)
+        # torch.nn.utils.clip_grad_norm_(model_d.parameters(), 1.)
         optimizer_d.step()
         lossD = lossD_real + lossD_fake1
 
@@ -185,7 +218,7 @@ def train(epoch, args, loader, model_g, model_d, loss_fn, optimizer_g, optimizer
         D_g_z2 = output.mean().item()
         lossG = loss_fn(output, labels)
         lossG.backward()
-        torch.nn.utils.clip_grad_norm_(model_g.parameters(), 5.)
+        # torch.nn.utils.clip_grad_norm_(model_g.parameters(), 1.)
         optimizer_g.step()
 
         loss_g_avg.update(lossG.item())
@@ -203,19 +236,23 @@ def validate(epoch, args, loader, model_g, loss_fn):
     print('Validating...')
     model_g.eval()
     metric = AverageMeter()
-    for itr, (params, params_cvt, obs, obs_kron, pos, _, _, gts) in enumerate(loader):
+    for itr, (params, params_cvt, obs, obs_kron, pos, scale, exp_noisy, gts) in enumerate(loader):
         params_cvt = params_cvt.to(args.device)
         params, obs, pos, gts = params.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
         obs_kron = obs_kron.to(args.device)
-        scale = torch.full((len(params), 1), 0.0, dtype=torch.float, device=args.device)
-        predicts = []
-        for _ in range(args.num_samples):
-            noise = torch.randn(len(params), 64, dtype=torch.float, device=args.device)
-            prs = model_g(noise, params, obs, pos, scale)
-            preds = model_g.expectation_from_prs(params_cvt, obs_kron, pos, prs)
-            predicts.append(preds)
-        predicts = torch.stack(predicts).mean(0)
-        metric.update(abs_deviation(predicts, gts))
+        exp_noisy = exp_noisy.to(args.device)
+        scale = scale.to(args.device)
+        # scale = torch.full((len(params), 1), 0.0, dtype=torch.float, device=args.device)
+        # predicts = []
+        # for _ in range(args.num_samples):
+        noise = torch.randn(len(params), 64, dtype=torch.float, device=args.device)
+        prs = model_g(noise, params, obs, pos, scale)
+        # prs = quasi_prob.to(args.device)
+        preds = model_g.expectation_from_prs(params_cvt, obs_kron, pos, prs)
+        # preds = model_g(noise, params, obs, pos, scale)
+        # predicts.append(preds)
+        # predicts = torch.stack(predicts).mean(0)
+        metric.update(abs_deviation(preds, exp_noisy))
 
     value = metric.getval()
     # args.writer.add_scalar('Loss/val', losses.getval(), epoch)
@@ -226,24 +263,23 @@ def validate(epoch, args, loader, model_g, loss_fn):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-path', default='../data_mitigate/trainset_vqe4l.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/trainset_vqe4l.pkl', type=str)
+    parser.add_argument('--dataset', default='MitigateDataset', type=str, help='[MitigateDataset, DistDataset]')
+    parser.add_argument('--train-path', default='../data_mitigate/dataset_vqe4l.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/dataset_vqe4l.pkl', type=str)
     parser.add_argument('--env-path', default='../environments/vqe_envs_train_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe/model_surrogate.pt', type=str)
     parser.add_argument('--logdir', default='../runs/env_vqe_noef', type=str, help='path to save logs and models')
-    parser.add_argument('--model-type', default='SurrogateModel', type=str, help='what model to use: [SurrogateModel]')
     parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--num-mitigates', default=12, type=int, help='number of mitigation gates')
-    parser.add_argument('--num-samples', default=10, type=int, help='number of samples to be averaged')
+    parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
+    parser.add_argument('--num-samples', default=30, type=int, help='number of samples to be averaged')
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--workers', default=4, type=int, help='dataloader worker nums')
-    parser.add_argument('--epochs', default=200, type=int)
+    parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--gpus', default='0', type=str)
-    parser.add_argument('--lr-g', default=2e-4, type=float, help='learning rate for generator')
-    parser.add_argument('--lr-d', default=2e-4, type=float, help='learning rate for discriminator')
+    parser.add_argument('--lr-g', default=5e-4, type=float, help='learning rate for generator')
+    parser.add_argument('--lr-d', default=5e-4, type=float, help='learning rate for discriminator')
     parser.add_argument('--beta1', default=0.5, type=float, help='beta1 for Adam optimizer')
-    parser.add_argument('--beta2', default=0.999, type=float, help='beta2 for Adam optimizer')
-    parser.add_argument('--nosave', default=False, action='store_true', help='not to save model')
+    parser.add_argument('--beta2', default=0.99, type=float, help='beta2 for Adam optimizer')
+    parser.add_argument('--thres', default=0.12, type=float, help='threshold to saving model')
     parser.add_argument('--save-name', default='gan_model.pt', type=str, help='model file name')
     args = parser.parse_args()
 

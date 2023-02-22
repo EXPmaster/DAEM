@@ -52,10 +52,12 @@ class IBMQEnv:
             # backend = provider.get_backend(self.config.backend)
             # self.backend = AerSimulator.from_backend(backend)
             self.backends = {}
-            for i in np.round(np.arange(0.01, 0.11, 0.01), 2):
+            for i in np.round(np.arange(0.0, 0.2, 0.001), 3):
                 noise_model = NoiseModel()
-                error_1 = noise.depolarizing_error(i, 1)  # single qubit gates
+                # error_1 = noise.amplitude_damping_error(i)  # noise.depolarizing_error(i, 1)  # single qubit gates
+                error_1 = noise.depolarizing_error(i, 1)
                 error_2 = noise.depolarizing_error(i, 2)
+                # error_2 = error_1.tensor(error_1)
                 noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
                 noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
                 self.backends[i] = AerSimulator(noise_model=noise_model)
@@ -79,15 +81,15 @@ class IBMQEnv:
             num += item[0].label == 'miti'
         return num
 
-    def build_state_table(self, shots_per_sim=500):
+    def build_state_table(self, shots_per_sim=10000):
         print('Building look up table...')
         tsfm = TransformCircWithIndex()
         mitigation_circuit = add_miti_gates_to_circuit(self.circuit)
         self.miti_circuit = mitigation_circuit.copy()
         mitigation_circuit.save_density_matrix()
-        num_identity = self.count_mitigate_gates(mitigation_circuit)
+        num_identity = self.count_mitigate_gates(mitigation_circuit) // 2
         table_size = len(tsfm.basis_ops) ** num_identity
-        backend = self.backends[0.01]
+        backend = self.backends[0.05]
 
         lut = []
         for i in tqdm(range(table_size)):
@@ -95,7 +97,6 @@ class IBMQEnv:
             t_circuit = transpile(circuit, backend)
             result_noisy = backend.run(t_circuit, shots=shots_per_sim).result()
             lut.append(result_noisy.data()['density_matrix'])
-
         return np.stack(lut)
 
     def step(self, noise_scale, obs_batch, p_batch):
@@ -308,9 +309,7 @@ def main(args):
         pickle.dump(save_data, f)
 
 
-def build_env_vqe(args):
-    vqe_circuit_path = '../environments/circuits_test_4l'
-    save_root = '../environments/vqe_envs_test_4l'
+def build_env_vqe(args, vqe_circuit_path, save_root):
     if not os.path.exists(save_root):
         os.makedirs(save_root)
     for circuit_name in os.listdir(vqe_circuit_path):
@@ -330,11 +329,18 @@ if __name__ == '__main__':
     device = torch.device('cuda') if use_gpu else 'cpu'
     print(device)
     
-    ArgsClass = namedtuple('args', ['num_layers', 'num_qubits', 'backend', 'save_path', 'data_num'])
-    args = ArgsClass(3, 4, 'ibmq_santiago', '../data_surrogate/env_vqe_train.pkl', 3000)
+    ArgsClass = namedtuple('args', ['num_layers', 'num_qubits'])
+    args = ArgsClass(3, 4)
     # env = IBMQEnv(args)
     # env.save(args.env_path)
     # print(env.circuit)
-    build_env_vqe(args)
+    vqe_circuit_path = '../environments/circuits_train_4l'
+    save_root = '../environments/vqe_envs_train_4l'
+    build_env_vqe(args, vqe_circuit_path, save_root)
+
+    vqe_circuit_path = '../environments/circuits_test_4l'
+    save_root = '../environments/vqe_envs_test_4l'
+    build_env_vqe(args, vqe_circuit_path, save_root)
+
     # main(args)
     

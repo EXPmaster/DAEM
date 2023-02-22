@@ -15,13 +15,13 @@ from sklearn.linear_model import LinearRegression
 class CDRTrainer:
 
     def __init__(self, noise_model):
-        self.noisy_backend = AerSimulator(noise_model=noise_model)
+        self.noisy_backend = noise_model
 
     def fit(self, circuit, observable):
         circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
         training_circuits = generate_training_circuits(
             circuit,
-            num_training_circuits=60,
+            num_training_circuits=25,
             fraction_non_clifford=0.1,
         )
         ideal_results = []

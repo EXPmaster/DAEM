@@ -20,12 +20,13 @@ class TestDataset(Dataset):
             self.dataset = pickle.load(f)
 
     def __getitem__(self, idx):
-        param, obs, pos, noise_scale, exp_noisy, exp_ideal = self.dataset[idx]
-        param_converted = int((param - 0.4) * 5)
+        param, obs, string, pos, noise_scale, exp_noisy, exp_ideal = self.dataset[idx]
+        param_converted = np.rint((param - 0.4) * 5)
         obs_kron = np.kron(obs[0], obs[1])
         return (
             torch.FloatTensor([param]),
-            torch.tensor([param_converted]),
+            torch.tensor([param_converted], dtype=int),
+            string,
             torch.tensor(obs, dtype=torch.cfloat),
             torch.tensor(obs_kron, dtype=torch.cfloat),
             torch.tensor(pos),
@@ -41,7 +42,7 @@ class TestDataset(Dataset):
 @torch.no_grad()
 def test(args):
     testset = TestDataset(args.test_path)
-    loader = DataLoader(testset, batch_size=args.batch_size, num_workers=args.workers, pin_memory=True, drop_last=True)
+    loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True, drop_last=True)
     model_g = Generator(args.num_mitigates)
     state_dict = torch.load(args.weight_path, map_location=args.device)
     model_g.load_state_dict(state_dict['model_g'], strict=False)
@@ -51,19 +52,23 @@ def test(args):
     metric = AverageMeter()
 
     print('Testing...')
-    for params, params_cvt, obs, obs_kron, pos, scale, noisy_r, gts in tqdm(loader):
+    for params, params_cvt, _, obs, obs_kron, pos, scale, noisy_r, gts in tqdm(loader):
         params_cvt = params_cvt.to(args.device)
         params, obs, pos, gts = params.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
-        scale = scale.to(args.device)
+        # scale = scale.to(args.device)
         obs_kron = obs_kron.to(args.device)
+        # scale = torch.full((len(params), 1), 0.00, dtype=torch.float, device=args.device)
         scale = torch.full((len(params), 1), 0.0, dtype=torch.float, device=args.device)
         predicts = []
         for _ in range(args.num_samples):
             noise = torch.randn(len(params), 64, dtype=torch.float, device=args.device)
             prs = model_g(noise, params, obs, pos, scale)
             preds = model_g.expectation_from_prs(params_cvt, obs_kron, pos, prs)
+            # preds = model_g(noise, params, obs, pos, scale)
             predicts.append(preds)
-        predicts = torch.stack(predicts).mean(0)
+        predicts = torch.cat(predicts, 1).mean(1, keepdim=True)
+        # assert False
+        # metric.update(abs_deviation(predicts, noisy_r.to(args.device)))
         metric.update(abs_deviation(predicts, gts))
 
     value = metric.getval()
@@ -76,8 +81,8 @@ if __name__ == '__main__':
     parser.add_argument('--test-path', default='../data_mitigate/testset_vqe4l.pkl', type=str)
     parser.add_argument('--env-path', default='../environments/vqe_envs_test_4l', type=str)
     parser.add_argument('--weight-path', default='../runs/env_vqe_noef/gan_model.pt', type=str)
-    parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--num-mitigates', default=12, type=int, help='number of mitigation gates')
+    parser.add_argument('--batch-size', default=1, type=int)
+    parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-samples', default=100, type=int, help='number of samples to be averaged')
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--workers', default=4, type=int, help='dataloader worker nums')

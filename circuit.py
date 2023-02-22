@@ -5,6 +5,7 @@ import numpy as np
 import cirq
 import cirq.ops as ops
 from cirq.circuits import InsertStrategy
+from torch.utils.data import random_split
 from tqdm import tqdm
 import sympy.parsing.sympy_parser as sympy_parser
 from multiprocessing import Pool
@@ -136,9 +137,8 @@ def generate_data_v2(num_data, num_layers, num_qubits, threshold=0.3, num_sample
 
 def split_datset(args, dataset, train_ratio=0.8):
     print('spliting dataset...')
-    train_len = int(len(dataset) * train_ratio)
-    trainset = dataset[:train_len]
-    testset = dataset[train_len:]
+    train_size = int(len(dataset) * train_ratio)
+    trainset, testset = random_split(dataset, [train_size, len(dataset) - train_size])
     with open(os.path.join(args.save_dir, args.train_name), 'wb') as f:
         pickle.dump(trainset, f)
     with open(os.path.join(args.save_dir, args.test_name), 'wb') as f:
@@ -190,9 +190,9 @@ if __name__ == '__main__':
     parser.add_argument('--threshold', default=0.005, type=float, help='keep data for exp_ideal >= threshold')
     parser.add_argument('--num-workers', default=16, type=int, help='the number of processes used in generating data')
     parser.add_argument('--save-dir', default='./data_mitigate', type=str)
-    parser.add_argument('--data-name', default='trainset_vqe4l.pkl', type=str)
-    parser.add_argument('--train-name', default='trainset.pkl', type=str)
-    parser.add_argument('--test-name', default='valset.pkl', type=str)
+    parser.add_argument('--data-name', default='dataset_vqe4l.pkl', type=str)
+    parser.add_argument('--train-name', default='trainset_vqe4l_new.pkl', type=str)
+    parser.add_argument('--test-name', default='valset_vqe4l_new.pkl', type=str)
     parser.add_argument('--generate', default=False, action='store_true', help='whether or not generate new data')
     parser.add_argument('--split', default=False, action='store_true', help='whether or not split train/test set')
     parser.add_argument('--ratio', default=0.7, type=float, help='train set ratio')

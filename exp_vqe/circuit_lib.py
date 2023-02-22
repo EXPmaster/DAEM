@@ -213,7 +213,8 @@ if __name__ == '__main__':
     # circuit = swaptest()
     # circuit = test_circuit()
     from my_envs import IBMQEnv
-    env = IBMQEnv.load('../environments/ibmq_random.pkl')
+    env = IBMQEnv.load('../environments/vqe_envs_train_4l/vqe_0.5.pkl')
     circuit = env.circuit  # DQCp()
-    circuit.draw(output='latex', filename='random_circ.pdf', idle_wires=False, initial_state=True)
+    # circuit.draw(output='latex', filename='circuit_ld.pdf', idle_wires=False, initial_state=True)
+    circuit.draw(output='mpl', filename='../imgs/circuit_ld.png', idle_wires=False, initial_state=True)
     # graph.save('../imgs/dqcp.png', quality=95)
