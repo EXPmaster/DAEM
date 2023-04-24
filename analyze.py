@@ -3,7 +3,7 @@ import pickle
 
 
 if __name__ == '__main__':
-    data_path = 'data_mitigate/testset_vqe4l.pkl'
+    data_path = 'data_mitigate/amp_damp/testset_vqe4l.pkl'
     with open(data_path, 'rb') as f:
         dataset = pickle.load(f)
     print(len(dataset))

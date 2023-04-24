@@ -117,12 +117,12 @@ def evaluation():
         
         circuit_ideal = circuit.copy()
         circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend)).result()
+        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
         state_vec = results.get_statevector(circuit)
 
         circuit_noisy = circuit.copy()
         circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend)).result()
+        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
         density_matrix = results.data()['density_matrix']
 
         num_qubits = circuit.num_qubits
@@ -232,12 +232,12 @@ def eval_testset():
 
         circuit_ideal = circuit.copy()
         circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend)).result()
+        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
         state_vec = results.get_statevector(circuit)
 
         circuit_noisy = circuit.copy()
         circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend)).result()
+        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
         density_matrix = results.data()['density_matrix']
 
         num_qubits = circuit.num_qubits
@@ -287,7 +287,7 @@ def evaluate_arbitrary():
     eval_results = []
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = Generator(args.num_mitigates)
+    model_g = SuperviseModel(args.num_mitigates)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
     model_g.load_envs(args, force=True)
     model_g.to(args.device)
@@ -317,12 +317,12 @@ def evaluate_arbitrary():
 
         circuit_ideal = circuit.copy()
         circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend)).result()
+        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
         state_vec = results.get_statevector(circuit)
 
         circuit_noisy = circuit.copy()
         circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend)).result()
+        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
         density_matrix = results.data()['density_matrix']
 
         num_qubits = circuit.num_qubits
@@ -332,27 +332,31 @@ def evaluate_arbitrary():
         all_results[params][0].append(abs(meas_ideal - meas_noisy))
         
         # GAN prediction
-        obs_kron = np.kron(obs[0], obs[1])
+        # obs_kron = np.kron(obs[0], obs[1])
+        obs_kron = np.kron(obs[pos[0]], obs[pos[1]])
         obs_kron = torch.tensor(obs_kron, dtype=torch.cfloat)[None].to(args.device)
         obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
         param = torch.FloatTensor([params])[None].to(args.device)
         pos = torch.tensor(pos)[None].to(args.device)
         scale = torch.FloatTensor([0.])[None].to(args.device)
-        param_cvt = torch.tensor([np.rint((params - 0.4) * 5)], dtype=int)[None].to(args.device)
+        param_cvt = torch.tensor([np.rint((params - 0.4) * 10)], dtype=int)[None].to(args.device)
         predicts = []
-        for _ in range(100):
-            print(rand_obs_string)
-            noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
-            prs = model_g(noise, param, obs, pos, scale)
-            arr = prs.cpu().numpy().ravel()
-            fig = plt.figure()
-            plt.bar(np.arange(len(arr)), arr)
-            plt.savefig('../imgs/quasiprob.png')
+        # for _ in range(100):
+        #     # print(rand_obs_string)
+        #     noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
+        #     prs = model_g(noise, param, obs, pos, scale)
+        #     # arr = prs.cpu().numpy().ravel()
+        #     # fig = plt.figure()
+        #     # plt.bar(np.arange(len(arr)), arr)
+        #     # plt.savefig('../imgs/quasiprob.png')
 
-            assert False
-            preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
-            predicts.append(preds)
-        predicts = torch.stack(predicts).mean(0).item()
+        #     # assert False
+        #     preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
+        #     predicts.append(preds)
+        # predicts = torch.stack(predicts).mean(0).item()
+        predicts = model_g(param, obs, pos, scale).squeeze().item()
+        # prs = model_g(param, obs, pos, scale)
+        # predicts = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs).squeeze().item()
         all_results[params][1].append(abs(meas_ideal - predicts))
         
         # CDR prediction
@@ -360,7 +364,7 @@ def evaluate_arbitrary():
         all_results[params][2].append(abs(cdr_predicts - meas_ideal))
 
         # ZNE prediction
-        zne_predicts = zne_model.fit_and_predict(circuit, observable)
+        zne_predicts = zne_model.fit_and_predict(circuit, observable, envs[params].backends)[-1]
         all_results[params][3].append(abs(zne_predicts - meas_ideal))
 
     parameters = []
@@ -383,16 +387,16 @@ def evaluate_arbitrary():
     plt.plot(parameters, diffs_cdr)
     plt.plot(parameters, diffs_zne)
     # plt.xscale('log')
-    plt.legend(['w/o mitigation', 'GAN mitigation', 'CDR mitigation', 'ZNE mitigation'])
+    plt.legend(['w/o mitigation', 'Supervise mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp.png')
+    plt.savefig('../imgs/comp_exp_gd_ampdamp.png')
 
 
 @torch.no_grad()
 def evaluate_different_noise_scale():
     backend = Aer.get_backend('aer_simulator')
-    paulis = [Pauli(x).to_matrix() for x in ('X', 'Y', 'Z')]
+    paulis = [Pauli(x).to_matrix() for x in ('I', 'X', 'Y', 'Z')]
     envs = {}
     for env_name in os.listdir(args.env_path):
         param = float(env_name.replace('.pkl', '').split('_')[-1])
@@ -401,13 +405,14 @@ def evaluate_different_noise_scale():
 
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = Generator(args.num_mitigates)
+    model_g = SuperviseModel(args.num_mitigates)
+    # model_g = Generator(args.num_mitigates)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
     model_g.load_envs(args, force=True)
     model_g.to(args.device)
     model_g.eval()
 
-    params = 0.6
+    params = 0.7
     observable = PauliOp(Pauli('XXII'))
     circuit = envs[params].circuit
     scales = np.arange(0, 0.2, 0.001)
@@ -418,30 +423,33 @@ def evaluate_different_noise_scale():
         noise_backend = envs[params].backends[scale]
         circuit_noisy = circuit.copy()
         circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend)).result()
+        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
         density_matrix = results.data()['density_matrix']
         num_qubits = circuit.num_qubits
         meas_noisy = density_matrix.expectation_value(observable).real
 
-        obs_kron = np.kron(paulis[0], paulis[0])
+        obs_kron = np.kron(paulis[1], paulis[1])
         obs_kron = torch.tensor(obs_kron, dtype=torch.cfloat)[None].to(args.device)
-        obs = torch.tensor([paulis[0], paulis[0]], dtype=torch.cfloat)[None].to(args.device)
+        # obs = torch.tensor([paulis[0], paulis[0]], dtype=torch.cfloat)[None].to(args.device)
+        obs = [np.eye(2) for _ in range(num_qubits)]
+        obs[0] = paulis[1]
+        obs[1] = paulis[1]
+        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
         param = torch.FloatTensor([params])[None].to(args.device)
         pos = torch.tensor([0, 1])[None].to(args.device)
         scale = torch.FloatTensor([scale])[None].to(args.device)
-        param_cvt = torch.tensor([np.rint((params - 0.4) * 5)], dtype=int)[None].to(args.device)
-        predicts = []
-        for _ in range(100):
-            noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
-            prs = model_g(noise, param, obs, pos, scale)
-            preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
-            predicts.append(preds)
-        predicts = torch.stack(predicts).mean(0).item()
+        param_cvt = torch.tensor([np.rint((params - 0.4) * 10)], dtype=int)[None].to(args.device)
+
+        # prs = model_g(param, obs, pos, scale)
+        # predicts = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
+        # noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
+        # predicts = model_g(noise, param, obs, pos, scale)
+        predicts = model_g(param, obs, pos, scale)
         results_sim.append(meas_noisy)
-        results_pred.append(predicts)
+        results_pred.append(predicts.cpu())
     
     zne_model = ZNETrainer()
-    model_params = zne_model.fit_and_predict(circuit, observable)
+    model_params = zne_model.fit_and_predict(circuit, observable, envs[params].backends)
     
     results_zne = []
     for scale in scales:
@@ -452,19 +460,98 @@ def evaluate_different_noise_scale():
     plt.plot(scales, results_pred)
     plt.plot(scales, results_zne)
     # plt.xscale('log')
-    plt.legend(['simulation', 'GAN prediction', 'ZNE prediction'])
+    plt.legend(['simulation', 'Supervise prediction', 'ZNE prediction'])
     plt.xlabel('Noise scale')
     plt.ylabel('Expectation of observable')
-    plt.savefig('../imgs/results_diff_scales_phasedampling.png')
+    plt.savefig('../imgs/results_diff_scales_gd_ampdamping.png')
 
+
+# @torch.no_grad()
+# def evaluate_different_noise_scale():
+#     backend = Aer.get_backend('aer_simulator')
+#     paulis = [Pauli(x).to_matrix() for x in ('I', 'X', 'Y', 'Z')]
+#     envs = {}
+#     for env_name in os.listdir(args.env_path):
+#         param = float(env_name.replace('.pkl', '').split('_')[-1])
+#         env_path = os.path.join(args.env_path, env_name)
+#         envs[param] = IBMQEnv.load(env_path)
+
+#     # load GAN model
+#     ckpt = torch.load(args.weight_path, map_location=args.device)
+#     model_g = Generator(args.num_mitigates)
+#     model_g.load_state_dict(ckpt['model_g'], strict=False)
+#     model_g.load_envs(args, force=True)
+#     model_g.to(args.device)
+#     model_g.eval()
+
+#     params = 0.6
+#     observable = PauliOp(Pauli('XXII'))
+#     circuit = envs[params].circuit
+#     scales = np.arange(0, 0.2, 0.001)
+#     results_sim = []
+#     results_pred = []
+#     for scale in scales:
+#         scale = round(scale, 3)
+#         noise_backend = envs[params].backends[scale]
+#         circuit_noisy = circuit.copy()
+#         circuit_noisy.save_density_matrix()
+#         results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
+#         density_matrix = results.data()['density_matrix']
+#         num_qubits = circuit.num_qubits
+#         meas_noisy = density_matrix.expectation_value(observable).real
+
+#         obs_kron = np.kron(paulis[0], paulis[0])
+#         obs_kron = torch.tensor(obs_kron, dtype=torch.cfloat)[None].to(args.device)
+#         obs = torch.tensor([paulis[0], paulis[0]], dtype=torch.cfloat)[None].to(args.device)
+#         param = torch.FloatTensor([params])[None].to(args.device)
+#         pos = torch.tensor([0, 1])[None].to(args.device)
+#         scale = torch.FloatTensor([scale])[None].to(args.device)
+#         param_cvt = torch.tensor([np.rint((params - 0.4) * 5)], dtype=int)[None].to(args.device)
+#         predicts = []
+#         for _ in range(100):
+#             noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
+#             prs = model_g(noise, param, obs, pos, scale)
+#             preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
+#             # if abs(scale - 0.05) < 1e-6:
+#             #     arr = prs.cpu().numpy().ravel()
+#             #     fig = plt.figure()
+#             #     plt.bar(np.arange(len(arr)), arr)
+#             #     plt.savefig('../imgs/quasiprob_ampdamp.png')
+#             #     print(preds)
+#             #     print(meas_noisy)
+#             #     rho = model_g.rhos[param_cvt.flatten()]  # .squeeze(1)
+#             #     rho = rho[torch.arange(param_cvt.shape[0]), pos[:, 0]]
+#             #     meas_results = torch.matmul(rho, obs_kron.unsqueeze(1)).diagonal(dim1=-2, dim2=-1).sum(-1).real
+#             #     print(meas_results)
+#             #     assert False
+#             predicts.append(preds)
+#         predicts = torch.stack(predicts).mean(0).item()
+#         results_sim.append(meas_noisy)
+#         results_pred.append(predicts)
     
+#     zne_model = ZNETrainer()
+#     model_params = zne_model.fit_and_predict(circuit, observable)
+    
+#     results_zne = []
+#     for scale in scales:
+#         results_zne.append(model_params[0] * scale ** 2 + model_params[1] * scale + model_params[2])
+
+#     fig = plt.figure()
+#     plt.plot(scales, results_sim)
+#     plt.plot(scales, results_pred)
+#     plt.plot(scales, results_zne)
+#     # plt.xscale('log')
+#     plt.legend(['simulation', 'GAN prediction', 'ZNE prediction'])
+#     plt.xlabel('Noise scale')
+#     plt.ylabel('Expectation of observable')
+#     plt.savefig('../imgs/results_diff_scales_ampdamping.png')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-path', default='../environments/vqe_envs_test_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe_noef/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/testset_vqe4l.pkl', type=str)
+    parser.add_argument('--env-path', default='../environments/gate_dependent_ad/vqe_envs_train_4l', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe_noef_ampdamp_gd_2023-04-24-14-20/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/gate_dependent_ad/testset_train.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -474,6 +561,6 @@ if __name__ == '__main__':
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # eval_testset()
-    # evaluate_arbitrary()
-    evaluate_different_noise_scale()
+    evaluate_arbitrary()
+    # evaluate_different_noise_scale()
 

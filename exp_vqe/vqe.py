@@ -66,8 +66,8 @@ class VQETrainer:
         # qinstance = QuantumInstance(backend=backend,
         #                             shots=num_shots)
         qinstance = QuantumInstance(QasmSimulator(method='matrix_product_state'), shots=num_shots)
-        # optimizer = SPSA(maxiter=num_iters)
-        optimizer = SLSQP(maxiter=num_iters)
+        optimizer = SPSA(maxiter=num_iters)
+        # optimizer = SLSQP(maxiter=num_iters)
         vqe = VQE(ansatz=circuit,
                   # gradient=Gradient(grad_method='lin_comb'),
                   optimizer=optimizer,

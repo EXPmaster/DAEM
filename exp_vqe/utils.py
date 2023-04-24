@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler
 from qiskit.quantum_info.operators import Pauli
 
 
@@ -19,11 +19,67 @@ class ConfigDict(dict):
         del self[name]
 
 
+class InfiniteSampler(Sampler):
+    
+    def __init__(self, dataset, shuffle=True, seed=0):
+        assert len(dataset) > 0
+        super().__init__(dataset)
+        self.dataset = dataset
+        self.shuffle = shuffle
+        self.seed = seed
+
+    def __iter__(self):
+        order = np.arange(len(self.dataset))
+        rnd = np.random.RandomState(self.seed)
+        idx = 0
+        while True:
+            i = idx % order.size
+            if i == 0 and self.shuffle:
+                rnd.shuffle(order)
+            yield order[i]
+            idx += 1
+
+
 def build_dataloader(args, dataset):
     trainset = dataset(args.train_path)
-    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True, drop_last=True)
+    train_sampler = InfiniteSampler(trainset, shuffle=True)
+    train_loader = DataLoader(
+        trainset,
+        batch_size=args.batch_size,
+        sampler=train_sampler,
+        num_workers=args.workers,
+        pin_memory=True
+    )
     testset = dataset(args.test_path)
-    test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True, drop_last=True)
+    test_loader = DataLoader(
+        testset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=True
+    )
+
+    return trainset, testset, train_loader, test_loader
+
+
+def build_dataloader2(args, dataset):
+    trainset = dataset(args.train_path)
+    train_loader = DataLoader(
+        trainset,
+        batch_size=args.batch_size,
+        # sampler=train_sampler,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=True
+    )
+    testset = dataset(args.test_path)
+    test_loader = DataLoader(
+        testset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=True
+    )
 
     return trainset, testset, train_loader, test_loader
 

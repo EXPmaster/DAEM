@@ -51,15 +51,34 @@ class IBMQEnv:
             # )
             # backend = provider.get_backend(self.config.backend)
             # self.backend = AerSimulator.from_backend(backend)
+            count = -1
+            angles = []
+            # self.params = []
+            for gate in self.circuit:
+                if gate.operation.name == 'u':
+                    count += 1
+                    gate.operation.label = f'parameter_{count}'
+                    # gate.operation.name = f'parameter_{count}'
+                    angles.append(sum([abs(float(x)) for x in gate.operation.params]))
+                    # self.params.append([float(x) for x in gate.operation.params])
+                # print(gate)
             self.backends = {}
-            for i in np.round(np.arange(0.0, 0.2, 0.001), 3):
+            # func = lambda x: 0.2 * np.sqrt(1 - np.exp(-(1 - np.cos(25 * np.arctan(x))) / (1 + x ** 2) ** (25 / 2)))
+            func = lambda x: 0.2 * (1 - np.exp(-(1 - np.cos(15 * np.arctan(x))) / (1 + x ** 2) ** (15 / 2)))
+            # angles = [np.exp(-1. / x) for x in angles]
+            for i in np.round(np.arange(0, 0.3, 0.001), 3):
                 noise_model = NoiseModel()
+                for j in range(len(angles)):
+                    error_1 = noise.amplitude_damping_error(func(i * angles[j] / 10))
+                    # error_1 = noise.depolarizing_error(i, 1)
+                    noise_model.add_all_qubit_quantum_error(error_1, f"parameter_{j}", range(self.circuit.num_qubits))
+                    noise_model.add_basis_gates(['u'])
                 # error_1 = noise.amplitude_damping_error(i)  # noise.depolarizing_error(i, 1)  # single qubit gates
-                error_1 = noise.depolarizing_error(i, 1)
-                error_2 = noise.depolarizing_error(i, 2)
+                # # error_1 = noise.depolarizing_error(i, 1)
+                # # error_2 = noise.depolarizing_error(i, 2)
                 # error_2 = error_1.tensor(error_1)
-                noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
-                noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+                # noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+                # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
                 self.backends[i] = AerSimulator(noise_model=noise_model)
 
             self.state_table = self.build_state_table()
@@ -94,7 +113,7 @@ class IBMQEnv:
         lut = []
         for i in tqdm(range(table_size)):
             circuit = tsfm(mitigation_circuit, i)
-            t_circuit = transpile(circuit, backend)
+            t_circuit = transpile(circuit, backend, optimization_level=0)
             result_noisy = backend.run(t_circuit, shots=shots_per_sim).result()
             lut.append(result_noisy.data()['density_matrix'])
         return np.stack(lut)
@@ -139,14 +158,14 @@ class IBMQEnv:
         circuit = self.circuit.copy()
         circuit.save_statevector()
         backend = Aer.get_backend('aer_simulator')
-        results = backend.run(transpile(circuit, backend), shots=shots).result()
+        results = backend.run(transpile(circuit, backend, optimization_level=0), shots=shots).result()
         return results.get_statevector(circuit)
 
     def simulate_noisy(self, noise_scale, shots=10000):
         backend = self.backends[noise_scale]
         circuit = self.circuit.copy()
         circuit.save_density_matrix()
-        t_circuit = transpile(circuit, backend)
+        t_circuit = transpile(circuit, backend, optimization_level=0)
         results = backend.run(t_circuit, shots=shots).result()
         return results.data()['density_matrix']
     
@@ -157,7 +176,7 @@ class IBMQEnv:
         circuit.add_register(cr)
         qr = circuit.qregs[0]
         circuit = self.pauli_measurement(circuit, pauli, qr, cr)
-        t_circuit = transpile(circuit, backend)
+        t_circuit = transpile(circuit, backend, optimization_level=0)
         results = backend.run(t_circuit, shots=shots).result().get_counts()
         return self.measure_pauli_z(results, pauli)
 
@@ -234,81 +253,6 @@ class IBMQEnv:
         return cls(pkl_file=data)
 
 
-def stable_softmax(x):
-    maxval = x.max(-1, keepdims=True)
-    x_exp = np.exp(x - maxval)
-    return x_exp / x_exp.sum(-1, keepdims=True) * np.sign(x)
-
-
-def gen_surrogate_dataset(env, data_num_per_run):
-    num_qubits = env.circuit.num_qubits
-    # pr = stable_softmax(rand_val)
-    prs = []
-    observable = []
-    obs_return = []
-    position = []
-    results = []
-    noise_scales = []
-    for noise_scale in env.state_table:
-        obs_batch = []
-        pr = np.random.rand(data_num_per_run, num_qubits, 4) * 2 - 1
-        for _ in range(data_num_per_run):
-            select_idx = np.random.randint(num_qubits - 1)
-            cur_data = [gen_rand_pauli() if i in (select_idx, select_idx + 1) else np.eye(2) for i in range(num_qubits)]
-            assert len(cur_data) == num_qubits
-            obs_batch.append(cur_data)
-            obs_return.append([cur_data[select_idx], cur_data[select_idx + 1]])
-            position.append([select_idx, select_idx + 1])
-            noise_scales.append(noise_scale)
-
-        prs.append(pr)
-        results.append(env.step(noise_scale, obs_batch, pr))
-        observable.extend(obs_batch)
-
-    return np.concatenate(prs), obs_return, position, noise_scales, np.concatenate(results)
-
-
-def main(args):
-    env_root = '../environments/vqe_envs_train'
-    data_num_per_run = 10
-    pr = []
-    observable = []
-    position = []
-    results = []
-    params = []
-    noise_scale = []
-    for env_name in os.listdir(env_root):
-        param = float(env_name.replace('.pkl', '').split('_')[-1])
-        env_path = os.path.join(env_root, env_name)
-        env = IBMQEnv.load(env_path)
-        if use_gpu:
-            for key, val in env.state_table.items():
-                env.state_table[key] = torch.from_numpy(val).to(device)
-        for _ in tqdm(range(args.data_num // data_num_per_run)):
-            p, o, i, n, r = gen_surrogate_dataset(env, data_num_per_run)
-            pr.append(p)
-            observable.append(o)
-            position.append(i)
-            results.append(r)
-            noise_scale.append(n)
-            params.append([param] * (data_num_per_run * len(env.state_table.keys())))
-
-    # print(np.concatenate(params).shape)
-    # print(np.concatenate(pr).shape)
-    # print(np.concatenate(observable).shape)
-    # print(np.concatenate(results).shape)
-    save_data = dict(
-        vqe_param=np.concatenate(params),
-        probability=np.concatenate(pr),
-        observable=np.concatenate(observable),
-        position=np.concatenate(position),
-        noise_scale=np.concatenate(noise_scale),
-        meas_result=np.concatenate(results)
-    )
-    with open(args.save_path, 'wb') as f:
-        pickle.dump(save_data, f)
-
-
 def build_env_vqe(args, vqe_circuit_path, save_root):
     if not os.path.exists(save_root):
         os.makedirs(save_root)
@@ -335,12 +279,10 @@ if __name__ == '__main__':
     # env.save(args.env_path)
     # print(env.circuit)
     vqe_circuit_path = '../environments/circuits_train_4l'
-    save_root = '../environments/vqe_envs_train_4l'
+    save_root = '../environments/gate_dependent_ad/vqe_envs_train_4l'
     build_env_vqe(args, vqe_circuit_path, save_root)
 
     vqe_circuit_path = '../environments/circuits_test_4l'
-    save_root = '../environments/vqe_envs_test_4l'
+    # save_root = '../environments/amp_damping/vqe_envs_test_4l'
     build_env_vqe(args, vqe_circuit_path, save_root)
-
-    # main(args)
     

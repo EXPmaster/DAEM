@@ -79,6 +79,7 @@ class TransformCircWithIndex(TransformationPass):
     def run(self, dag, idx):
         """Run the pass."""
         count = 0
+        idx_org = idx
         # iterate over all operations
         for node in dag.op_nodes():
             # if we hit a RYY or RZZ gate replace it
@@ -93,8 +94,9 @@ class TransformCircWithIndex(TransformationPass):
                 # replace the node with our new decomposition
                 dag.substitute_node_with_dag(node, circuit_to_dag(replacement))
                 count += 1
-                if count == 2:
-                    idx //= len(self.basis_ops)
+                idx //= len(self.basis_ops)
+                if count == 4:
+                    idx = idx_org
                     count = 0
         return dag
     
@@ -205,7 +207,7 @@ def add_miti_gates_to_circuit(circuit):
         subdag = layer['graph']
         for node in subdag.op_nodes():
             node_qargs = node.qargs
-            if len(node.op.params) == 3 and i > 4 * circuit.num_qubits:  # node.name != 'barrier' # i < circuit.num_qubits * 2:  # len(node_qargs) > 1 and np.random.rand() > 1.0:
+            if len(node.op.params) == 3 and i > 2 * circuit.num_qubits:  # node.name != 'barrier' # i < circuit.num_qubits * 2:  # len(node_qargs) > 1 and np.random.rand() > 1.0:
                 mitigate_layer = DAGCircuit()
                 mitigate_layer.add_qreg(canonical_register)
                 
@@ -214,7 +216,7 @@ def add_miti_gates_to_circuit(circuit):
                 
                 new_dag.compose(mitigate_layer, qubits=order)
                 new_dag.compose(subdag, qubits=order)
-                new_dag.compose(mitigate_layer, qubits=order)
+                # new_dag.compose(mitigate_layer, qubits=order)
                 
                 # new_dag.compose(mitigate_layer, qubits=order)
             else:
