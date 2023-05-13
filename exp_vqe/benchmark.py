@@ -289,7 +289,7 @@ def evaluate_arbitrary():
     ckpt = torch.load(args.weight_path, map_location=args.device)
     model_g = SuperviseModel(args.num_mitigates)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
-    model_g.load_envs(args, force=True)
+    # model_g.load_envs(args, force=True)
     model_g.to(args.device)
     model_g.eval()
 
@@ -390,7 +390,7 @@ def evaluate_arbitrary():
     plt.legend(['w/o mitigation', 'Supervise mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_gd_ampdamp.png')
+    plt.savefig('../imgs/comp_exp_gd_phasedamp.png')
 
 
 @torch.no_grad()
@@ -408,11 +408,11 @@ def evaluate_different_noise_scale():
     model_g = SuperviseModel(args.num_mitigates)
     # model_g = Generator(args.num_mitigates)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
-    model_g.load_envs(args, force=True)
+    # model_g.load_envs(args, force=True)
     model_g.to(args.device)
     model_g.eval()
 
-    params = 0.7
+    params = 0.6
     observable = PauliOp(Pauli('XXII'))
     circuit = envs[params].circuit
     scales = np.arange(0, 0.2, 0.001)
@@ -463,7 +463,7 @@ def evaluate_different_noise_scale():
     plt.legend(['simulation', 'Supervise prediction', 'ZNE prediction'])
     plt.xlabel('Noise scale')
     plt.ylabel('Expectation of observable')
-    plt.savefig('../imgs/results_diff_scales_gd_ampdamping.png')
+    plt.savefig('../imgs/results_diff_scales_gd_phasedamp.png')
 
 
 # @torch.no_grad()
@@ -549,9 +549,9 @@ def evaluate_different_noise_scale():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-path', default='../environments/gate_dependent_ad/vqe_envs_train_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe_noef_ampdamp_gd_2023-04-24-14-20/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/gate_dependent_ad/testset_train.pkl', type=str)
+    parser.add_argument('--env-path', default='../environments/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe_noef_non_markov_pd_2023-05-13-13-57/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/non_markov_pd/testset_train.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')

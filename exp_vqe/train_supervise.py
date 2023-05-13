@@ -20,10 +20,11 @@ from datasets import MitigateDataset
 def main(args):
     trainset, testset, train_loader, test_loader = build_dataloader2(args, eval(args.dataset))
     print(len(trainset))
-    loss_fn = nn.MSELoss()
-    # model_s.load_state_dict(torch.load(args.weight_path, map_location=args.device))
-    model = SuperviseModel(args.num_mitigates)
-    model.load_envs(args, force=True)
+    if args.miti_prob:
+        loss_fn = nn.CrossEntropyLoss()
+    else:
+        loss_fn = nn.MSELoss()
+    model = SuperviseModel(args.num_mitigates, mitigate_prob=args.miti_prob)
     model.to(args.device)
     # optimizer_g = optim.Adam(model_g.parameters(), lr=args.lr_g, betas=(args.beta1, args.beta2))
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
@@ -38,7 +39,13 @@ def main(args):
         # if epoch % 10 == 0:
         metric = validate(epoch, args, test_loader, model, loss_fn)
         # scheduler.step()
-        if metric < best_metric:
+        model_save_flag = False
+        if args.miti_prob and metric > 0.9:
+            if metric > best_metric:
+                model_save_flag = True
+        elif not args.miti_prob and metric < best_metric:
+            model_save_flag = True
+        if model_save_flag:
             print('Saving model...')
             best_metric = metric
             ckpt = {
@@ -93,6 +100,7 @@ def validate(epoch, args, loader, model, loss_fn):
     print('Validating...')
     model.eval()
     metric = AverageMeter()
+    unmitigated_metric = AverageMeter()
     for itr, (params, params_cvt, obs, obs_kron, pos, scale, exp_noisy, gts) in enumerate(loader):
         params_cvt = params_cvt.to(args.device)
         params, obs, pos, gts = params.to(args.device), obs.to(args.device), pos.to(args.device), gts.to(args.device)
@@ -106,21 +114,27 @@ def validate(epoch, args, loader, model, loss_fn):
         preds = model(params, obs, pos, scale)
         # predicts.append(preds)
         # predicts = torch.stack(predicts).mean(0)
-        metric.update(abs_deviation(preds, exp_noisy))
+        if args.miti_prob:
+            diff = nn.CosineSimilarity()(preds.softmax(1), gts).mean().item()
+            unmitigated_metric.update(nn.CosineSimilarity()(exp_noisy.softmax(1), gts).mean().item())
+        else:
+            diff = abs_deviation(preds, exp_noisy)
+        metric.update(diff)
 
     value = metric.getval()
     # args.writer.add_scalar('Loss/val', losses.getval(), epoch)
     args.writer.add_scalar('Abs_deviation/val', value, epoch)
-    print('validation absolute deviation: {:.6f}'.format(value))
+    print('validation metric: {:.6f}'.format(value))
+    # print('unmitigated metric: {:.6f}'.format(unmitigated_metric.getval()))
     return value
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='MitigateDataset', type=str, help='[MitigateDataset]')
-    parser.add_argument('--train-path', default='../data_mitigate/gate_dependent_ad/dataset_vqe4l.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/gate_dependent_ad/dataset_vqe4l.pkl', type=str)
-    parser.add_argument('--env-path', default='../environments/gate_dependent_ad/vqe_envs_train_4l', type=str)
+    parser.add_argument('--miti-prob', action='store_true', default=False, help='mitigate probability distribution or expectation')
+    parser.add_argument('--train-path', default='../data_mitigate/non_markov_pd/dataset_vqe4l.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/non_markov_pd/dataset_vqe4l.pkl', type=str)
     parser.add_argument('--logdir', default='../runs', type=str, help='path to save logs and models')
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
@@ -142,7 +156,7 @@ if __name__ == '__main__':
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(args.device)
     time_str = time.strftime('%Y-%m-%d-%H-%M')
-    args.logdir = os.path.join(args.logdir, f'env_vqe_noef_ampdamp_gd_{time_str}')
+    args.logdir = os.path.join(args.logdir, f'env_vqe_noef_non_markov_pd_{time_str}')
     if not os.path.exists(args.logdir):
         os.mkdir(args.logdir)
     args.writer = SummaryWriter(log_dir=args.logdir)

@@ -24,7 +24,7 @@ class ZNETrainer:
         noise_levels = np.round(np.arange(0.05, 0.29, 0.01), 3)
         noisy_results = []
         # func = lambda x: 0.2 * np.sqrt(1 - np.exp(-(1 - np.cos(25 * np.arctan(x))) / (1 + x ** 2) ** (25 / 2)))
-        func = lambda x: 0.2 * (1 - np.exp(-(1 - np.cos(15 * np.arctan(x))) / (1 + x ** 2) ** (15 / 2)))
+        # func = lambda x: 0.2 * (1 - np.exp(-(1 - np.cos(15 * np.arctan(x))) / (1 + x ** 2) ** (15 / 2)))
         for n in noise_levels:
             noise_model = backends[n]
             # error_1 = noise.depolarizing_error(n, 1)  # single qubit gates

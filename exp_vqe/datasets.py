@@ -29,6 +29,9 @@ class MitigateDataset(Dataset):
 
     def __getitem__(self, idx):
         param, obs, pos, noise_scale, exp_noisy, exp_ideal = self.dataset[idx]
+        if isinstance(exp_noisy, float):
+            exp_noisy = [exp_noisy]
+            exp_ideal = [exp_ideal]
         param_converted = np.rint((param - 0.4) * 10)
         obs_kron = np.kron(obs[pos[0]], obs[pos[1]])
         return (
@@ -36,10 +39,10 @@ class MitigateDataset(Dataset):
             torch.tensor([param_converted], dtype=int),
             torch.tensor(obs, dtype=torch.cfloat),
             torch.tensor(obs_kron, dtype=torch.cfloat),
-            torch.tensor(pos),
+            torch.FloatTensor(pos),
             torch.FloatTensor([noise_scale]),
-            torch.FloatTensor([exp_noisy]),
-            torch.FloatTensor([exp_ideal])
+            torch.FloatTensor(exp_noisy),
+            torch.FloatTensor(exp_ideal)
         )
 
     def __len__(self):
@@ -123,9 +126,10 @@ def gen_mitigation_data_pauli(args):
                     #     # sample_noisy = env.sample_noisy(noise_scale, obs)
                     #     sample_noisy = np.random.normal(exp_noisy, 0.0001)
                     dataset.append([param, obs_ret, selected_qubits, noise_scale, round(exp_noisy, 6), round(exp_ideal, 6)])
-    with open(args.out_path, 'wb') as f:
+    out_path = os.path.join(args.out_root, 'dataset_vqe4l.pkl')
+    with open(out_path, 'wb') as f:
         pickle.dump(dataset, f)
-    print(f'Generation finished. File saved to {args.out_path}')
+    print(f'Generation finished. File saved to {out_path}')
 
 
 def gen_mitigation_data_pauli_v2(args):
@@ -175,9 +179,8 @@ def gen_mitigation_data_pauli_v2(args):
     print(f'Generation finished. File saved to {args.out_path}')
 
 
-
 def gen_mitigation_data_pauli_v3(args):
-    from ibmq_circuit_transformer import TransformToClifford
+    # from ibmq_circuit_transformer import TransformToClifford
     dataset = []
     paulis = ['X', 'Y', 'Z']
 
@@ -189,39 +192,26 @@ def gen_mitigation_data_pauli_v3(args):
         op_str = 'I' * num_qubits
         ideal_state = env.simulate_ideal()
         for idx in range(num_qubits - 1): # 5
-            for obs1, obs2 in itertools.product(paulis, paulis): # 16
-                rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
-                if rand_obs_string == op_str: continue
-                obs_ret = [np.eye(2) for _ in range(num_qubits)]
-                # rand_obs = [Pauli(obs1).to_matrix(), Pauli(obs2).to_matrix()]
-                obs_ret[idx] = Pauli(obs1).to_matrix()
-                obs_ret[idx + 1] = Pauli(obs2).to_matrix()
-                selected_qubits = [idx, idx + 1]
-                obs = Pauli(rand_obs_string)
-                obs_ret = np.array(obs_ret)
-                exp_ideal = ideal_state.expectation_value(obs).real
-                if (param * 10) % 2 < 1e-5:
-                    min_noise = 0.05
-                else:
-                    min_noise = 0.02
-                for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
-                    # noise_scale = 0.01
-                    # rho = env.simulate_noisy(noise_scale)
-                    # exp_noisy = rho.expectation_value(obs).real
-                    # exp_s = env.sample_noisy(noise_scale, obs)
-                    # rho_p = partial_trace(env.state_table[0], selected_qubits, [2] * num_qubits)
-                    # exp_2 = np.trace(rho_p @ np.kron(obs_ret[0], obs_ret[1])).real
-                    # print(exp_noisy, exp_s, exp_2, exp_ideal)
-                    # assert False
-
-                    exp_noisy = env.simulate_noisy(noise_scale).expectation_value(obs).real
-                    # for _ in range(100):
-                    #     # sample_noisy = env.sample_noisy(noise_scale, obs)
-                    #     sample_noisy = np.random.normal(exp_noisy, 0.0001)
-                    dataset.append([param, obs_ret, selected_qubits, noise_scale, round(exp_noisy, 6), round(exp_ideal, 6)])
-    with open(args.out_path, 'wb') as f:
+            rand_obs_string = op_str
+            obs_ret = [np.eye(2) for _ in range(num_qubits)]
+            selected_qubits = [idx, idx + 1]
+            obs = Pauli(rand_obs_string)
+            obs_ret = np.array(obs_ret)
+            exp_ideal = ideal_state.probabilities(selected_qubits)
+            if (param * 10) % 2 < 1e-5:
+                min_noise = 0.05
+            else:
+                min_noise = 0.02
+            for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
+                exp_noisy = env.simulate_noisy(noise_scale).probabilities(selected_qubits)
+                # for _ in range(100):
+                #     # sample_noisy = env.sample_noisy(noise_scale, obs)
+                #     sample_noisy = np.random.normal(exp_noisy, 0.0001)
+                dataset.append([param, obs_ret, selected_qubits, noise_scale, exp_noisy, exp_ideal])
+    out_path = os.path.join(args.out_root, 'dataset_vqe4l.pkl')
+    with open(out_path, 'wb') as f:
         pickle.dump(dataset, f)
-    print(f'Generation finished. File saved to {args.out_path}')
+    print(f'Generation finished. File saved to {out_path}')
 
 
 def gen_test_data_pauli(args):
@@ -248,21 +238,52 @@ def gen_test_data_pauli(args):
                 exp_ideal = ideal_state.expectation_value(obs).real
                 exp_noisy = env.simulate_noisy(0.05).expectation_value(obs).real
                 dataset.append([param, obs_ret, rand_obs_string, selected_qubits, 0.05, round(exp_noisy, 6), round(exp_ideal, 6)])
-    with open(args.out_test, 'wb') as f:
+    out_test = os.path.join(args.out_root, 'testset_train.pkl')
+    with open(out_test, 'wb') as f:
         pickle.dump(dataset, f)
-    print(f'Generation finished. File saved to {args.out_test}')
+    print(f'Generation finished. File saved to {out_test}')
+
+
+def gen_test_data_pauli_v3(args):
+    dataset = []
+    paulis = ['X', 'Y', 'Z']
+
+    for env_name in tqdm(os.listdir(args.env_test)):
+        param = float(env_name.replace('.pkl', '').split('_')[-1])
+        env_path = os.path.join(args.env_test, env_name)
+        env = IBMQEnv.load(env_path)
+        num_qubits = env.circuit.num_qubits
+        op_str = 'I' * num_qubits
+        ideal_state = env.simulate_ideal()
+        for idx in range(num_qubits - 1): # 5
+            rand_obs_string = op_str
+            obs_ret = [np.eye(2) for _ in range(num_qubits)]
+            selected_qubits = [idx, idx + 1]
+            obs = Pauli(rand_obs_string)
+            obs_ret = np.array(obs_ret)
+            exp_ideal = ideal_state.probabilities(selected_qubits)
+            exp_noisy = env.simulate_noisy(0.05).probabilities(selected_qubits)
+            dataset.append([param, obs_ret, rand_obs_string, selected_qubits, 0.05, exp_noisy, exp_ideal])
+    
+    out_test = os.path.join(args.out_root, 'testset_train.pkl')
+    with open(out_test, 'wb') as f:
+        pickle.dump(dataset, f)
+    print(f'Generation finished. File saved to {out_test}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-root', default='../environments/gate_dependent_ad/vqe_envs_train_4l', type=str)
-    parser.add_argument('--env-test', default='../environments/gate_dependent_ad/vqe_envs_train_4l', type=str)
-    parser.add_argument('--out-path', default='../data_mitigate/gate_dependent_ad/dataset_vqe4l.pkl', type=str)
-    parser.add_argument('--out-test', default='../data_mitigate/gate_dependent_ad/testset_train.pkl', type=str)
+    parser.add_argument('--env-root', default='../environments/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--env-test', default='../environments/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--out-root', default='../data_mitigate/non_markov_pd', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--num-data', default=20_000, type=int)  # 5000 for train
     args = parser.parse_args()
     
+    if not os.path.exists(args.out_root):
+        os.makedirs(args.out_root)
+    # gen_mitigation_data_pauli_v3(args)
+    # gen_test_data_pauli_v3(args)
     gen_mitigation_data_pauli(args)
     gen_test_data_pauli(args)
     # import subprocess
