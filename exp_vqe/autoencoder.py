@@ -100,16 +100,21 @@ class StateGenerator:
         if state_type == 'cat':
             dataset = self.get_cat_states()
         self.idx = 0
+        self.shuffle = shuffle
         if shuffle:
             np.random.shuffle(dataset)
         self.dataset = dataset
         self.batch_size = batch_size
 
-    def get_cat_states(self):
+    def get_cat_states(self, num_data=32):
+        dataset = []
         N = self.state_dim
-        psi = (coherent(N, -200j) + coherent(N, 200j))
-        psi /= psi.norm()
-        return psi.full()[None]
+        for alpha in np.linspace(3, 4, num_data):
+            N = self.state_dim
+            psi = (coherent(N, -alpha) + coherent(N, alpha))
+            psi /= psi.norm()
+            dataset.append(psi.full().squeeze())
+        return np.array(dataset)
     
     def __iter__(self):
         return self
@@ -117,6 +122,8 @@ class StateGenerator:
     def __next__(self):
         if self.idx >= len(self.dataset):
             self.idx = 0
+            if self.shuffle:
+                np.random.shuffle(self.dataset)
             raise StopIteration
 
         start = self.idx
@@ -221,21 +228,27 @@ def train(args):
     q_device = tq.QuantumDevice(n_wires=args.num_input)
     tq_model.cpu().eval()
     circuit = tq2qiskit(q_device, tq_model)
-    test_circuit = QuantumCircuit(args.num_input)
-    input_state = data_loader.get_cat_states().squeeze()
-    input_state = switch_little_big_endian_state(input_state)
-    test_circuit.initialize(input_state, range(args.num_input))
-    test_circuit = test_circuit.compose(circuit)
-    test_circuit.barrier()
-    for i in range(args.num_hidden, args.num_input):
-        test_circuit.reset(i)
-    test_circuit.barrier()
-    test_circuit = test_circuit.compose(circuit.inverse())
-    backend = AerSimulator()
-    t_circuit = transpile(test_circuit, backend, optimization_level=0)
-    result = Statevector(t_circuit).data
-    fidelity = np.abs(np.dot(result.conj(), input_state)) ** 2
-    return fidelity, test_circuit
+    input_states = data_loader.get_cat_states().squeeze()
+    fidelities = []
+    for input_state in input_states:
+        test_circuit = QuantumCircuit(args.num_input)
+        input_state = switch_little_big_endian_state(input_state)
+        test_circuit.initialize(input_state, range(args.num_input))
+        test_circuit = test_circuit.compose(circuit)
+        test_circuit.barrier()
+        for i in range(args.num_hidden, args.num_input):
+            test_circuit.reset(i)
+        test_circuit.barrier()
+        test_circuit = test_circuit.compose(circuit.inverse())
+        backend = AerSimulator()
+        t_circuit = transpile(test_circuit, backend, optimization_level=0)
+        result = Statevector(t_circuit).data
+        fidelity = np.abs(np.dot(result.conj(), input_state)) ** 2
+        fidelities.append(fidelity)
+
+    fidelity = np.mean(fidelities)
+
+    return fidelity, circuit
 
     # test_circuit.measure_all()
     # state_1 = Statevector(test_circuit).data
@@ -282,11 +295,11 @@ def generate_train_circuits(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_input', type=int, default=8, help='Dimension of input state.')
+    parser.add_argument('--num_input', type=int, default=6, help='Dimension of input state.')
     parser.add_argument('--num_hidden', type=int, default=4, help='Dimension of encoded state.')
     parser.add_argument('--num_epochs', type=int, default=150, help='Number of epochs to train.')
-    parser.add_argument('--out_path', type=str, default='../environments/autoencoder_8l', help='Output circuit dir.')
-    parser.add_argument('--circuit_num', type=int, default=16, help='Number of circuits for mitigation.')
+    parser.add_argument('--out_path', type=str, default='../environments/circuits/autoencoder_6l', help='Output circuit dir.')
+    parser.add_argument('--circuit_num', type=int, default=1, help='Number of circuits for mitigation.')
     parser.add_argument('--lr', type=float, default=1e-2, help='Learning rate.')
     args = parser.parse_args()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

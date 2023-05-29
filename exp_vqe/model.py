@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from qiskit.quantum_info.operators import Operator, Pauli
+from qiskit.circuit.library.standard_gates import HGate, SdgGate, IGate
 
 from my_envs import IBMQEnv
 from utils import partial_trace
@@ -48,12 +50,13 @@ class AEModel(nn.Module):
 
 class SuperviseModel(nn.Module):
 
-    def __init__(self, num_miti, num_qubits=4, hidden_size=128, mitigate_prob=False):
+    def __init__(self, num_miti, num_qubits=6, hidden_size=128, mitigate_prob=False):
         super().__init__()
         self.mitigate_prob = mitigate_prob
+        self.num_qubits = num_qubits
         if self.mitigate_prob:
-            out_dim = 4
-            obs_embed_dim = 2
+            out_dim = 2
+            obs_embed_dim = self.num_qubits * 2 * 4
         else:
             out_dim = 1
             obs_embed_dim = 8 * 2 * 2
@@ -77,11 +80,8 @@ class SuperviseModel(nn.Module):
         )
 
     def forward(self, params, obs, pos, scale):
-        if self.mitigate_prob:
-            obs_ebd = self.obs_embed(pos)
-        else:
-            obs_flat = torch.cat((obs.real, obs.imag), -1).flatten(1)
-            obs_ebd = self.obs_embed(obs_flat)
+        obs_flat = torch.cat((obs.real, obs.imag), -1).flatten(1)
+        obs_ebd = self.obs_embed(obs_flat)
         
         param_ebd = self.param_embed(params)
         scale_ebd = self.scale_embed(scale)
@@ -92,6 +92,39 @@ class SuperviseModel(nn.Module):
         # if self.mitigate_prob:
         #     x = torch.softmax(x, -1)
         return x
+
+    def construct_shadow(self, params, num_samples=10000):
+        # from qiskit.quantum_info.operators.predicates import is_positive_semidefinite_matrix
+        shadow = np.zeros((2 ** self.num_qubits, 2 ** self.num_qubits), dtype=complex)
+        paulis = ['X', 'Y', 'Z']
+        hadamard = HGate().to_matrix()
+        sdg = SdgGate().to_matrix()
+        identity = IGate().to_matrix()
+        zero_state = np.array([[1., 0.], [0., 0.]])
+        one_state = np.array([[0., 0.], [0., 1.]])
+        bit_states = [zero_state, one_state]
+        unitaries = {'X': hadamard, 'Y': hadamard @ sdg, 'Z': identity}
+        scale = torch.FloatTensor([0.])[None].to(params.device)
+
+        for itr in range(num_samples):
+            rho_snapshot = [1]
+            for idx in range(self.num_qubits):
+                rand_pauli = np.random.choice(paulis)
+                U = unitaries[rand_pauli]
+                obs = [np.eye(2) for _ in range(self.num_qubits)]
+                obs[idx] = Pauli(rand_pauli).to_matrix()
+                obs = torch.tensor(np.array(obs), dtype=torch.cfloat, device=params.device)[None]
+                distr = self.forward(params, obs, None, scale).softmax(1).cpu().numpy()
+                
+                out_state_idx = np.random.choice(np.arange(2), p=distr.squeeze())
+                out_state = bit_states[out_state_idx]
+                local_rho = 3 * (U.conj().T @ out_state @ U) - identity
+                rho_snapshot = np.kron(rho_snapshot, local_rho)
+            shadow += rho_snapshot
+        shadow /= num_samples
+        # print(shadow)
+        # print(np.linalg.eigvalsh(shadow / np.trace(shadow)))
+        return shadow / np.trace(shadow)
 
 
 class Generator(nn.Module):

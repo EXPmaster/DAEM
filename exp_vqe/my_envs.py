@@ -72,9 +72,10 @@ class IBMQEnv:
                 for j in range(len(angles)):
                     # error_1 = noise.amplitude_damping_error(func(i * angles[j] / 10))
                     # error_1 = noise.depolarizing_error(i, 1)
-                    error_1 = noise.phase_damping_error(func(i * angles[j] / 10))
+                    error_1 = noise.phase_damping_error(i)
+                    # error_1 = noise.phase_damping_error(func(i * angles[j] / 10))
                     noise_model.add_all_qubit_quantum_error(error_1, f"parameter_{j}", range(self.circuit.num_qubits))
-                    noise_model.add_basis_gates(['u'])
+                    noise_model.add_basis_gates(['u', 'u3'])
                 # error_1 = noise.amplitude_damping_error(i)  # noise.depolarizing_error(i, 1)  # single qubit gates
                 # # error_1 = noise.depolarizing_error(i, 1)
                 # # error_2 = noise.depolarizing_error(i, 2)
@@ -163,17 +164,23 @@ class IBMQEnv:
         results = backend.run(transpile(circuit, backend, optimization_level=0), shots=shots).result()
         return results.get_statevector(circuit)
 
-    def simulate_noisy(self, noise_scale, shots=10000):
+    def simulate_noisy(self, noise_scale, circuit=None, shots=3000):
         backend = self.backends[noise_scale]
-        circuit = self.circuit.copy()
+        if circuit is None:
+            circuit = self.circuit.copy()
+        else:
+            circuit = circuit.copy()
         circuit.save_density_matrix()
         t_circuit = transpile(circuit, backend, optimization_level=0)
         results = backend.run(t_circuit, shots=shots).result()
         return results.data()['density_matrix']
     
-    def sample_noisy(self, noise_scale, pauli, shots=1000):
+    def sample_noisy(self, noise_scale, pauli, circuit=None, shots=1000):
         backend = self.backends[noise_scale]
-        circuit = self.circuit.copy()
+        if circuit is None:
+            circuit = self.circuit.copy()
+        else:
+            circuit = circuit.copy()
         cr = ClassicalRegister(circuit.num_qubits)
         circuit.add_register(cr)
         qr = circuit.qregs[0]
@@ -280,11 +287,11 @@ if __name__ == '__main__':
     # env = IBMQEnv(args)
     # env.save(args.env_path)
     # print(env.circuit)
-    vqe_circuit_path = '../environments/circuits_train_4l'
-    save_root = '../environments/phase_damping/vqe_envs_train_4l'
+    vqe_circuit_path = '../environments/circuits/autoencoder_6l'
+    save_root = '../environments/noise_models/phase_damping/ae_train_6l'
     build_env_vqe(args, vqe_circuit_path, save_root)
 
-    vqe_circuit_path = '../environments/circuits_test_4l'
-    # save_root = '../environments/amp_damping/vqe_envs_test_4l'
-    build_env_vqe(args, vqe_circuit_path, save_root)
+    # vqe_circuit_path = '../environments/circuits_test_4l'
+    # # save_root = '../environments/amp_damping/vqe_envs_test_4l'
+    # build_env_vqe(args, vqe_circuit_path, save_root)
     

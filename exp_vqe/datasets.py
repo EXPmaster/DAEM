@@ -12,6 +12,7 @@ import pathos
 import cirq
 from tqdm import tqdm
 
+from qiskit import QuantumCircuit
 from qiskit.providers.aer import AerSimulator
 from qiskit.providers.aer.noise import NoiseModel
 import qiskit.providers.aer.noise as noise
@@ -19,6 +20,7 @@ from qiskit.quantum_info.operators import Operator, Pauli
 
 from utils import gen_rand_pauli, gen_rand_obs, partial_trace
 from my_envs import IBMQEnv
+from autoencoder import StateGenerator
 
 
 class MitigateDataset(Dataset):
@@ -33,7 +35,8 @@ class MitigateDataset(Dataset):
             exp_noisy = [exp_noisy]
             exp_ideal = [exp_ideal]
         param_converted = np.rint((param - 0.4) * 10)
-        obs_kron = np.kron(obs[pos[0]], obs[pos[1]])
+        # obs_kron = np.kron(obs[pos[0]], obs[pos[1]])
+        obs_kron = np.kron(obs[0], obs[0])
         return (
             torch.FloatTensor([param]),
             torch.tensor([param_converted], dtype=int),
@@ -132,7 +135,7 @@ def gen_mitigation_data_pauli(args):
     print(f'Generation finished. File saved to {out_path}')
 
 
-def gen_mitigation_data_pauli_v2(args):
+def gen_mitigation_data_pauli_sampling(args):
     dataset = []
     paulis = ['X', 'Y', 'Z']
 
@@ -179,36 +182,45 @@ def gen_mitigation_data_pauli_v2(args):
     print(f'Generation finished. File saved to {args.out_path}')
 
 
-def gen_mitigation_data_pauli_v3(args):
+def gen_mitigation_data_pauli_distribution(args):
     # from ibmq_circuit_transformer import TransformToClifford
+    from torchquantum import switch_little_big_endian_state
     dataset = []
     paulis = ['X', 'Y', 'Z']
+    states = StateGenerator('cat', 6, shuffle=False).dataset
 
-    for env_name in tqdm(os.listdir(args.env_root)):
+    for env_name in os.listdir(args.env_root):
         param = float(env_name.replace('.pkl', '').split('_')[-1])
         env_path = os.path.join(args.env_root, env_name)
         env = IBMQEnv.load(env_path)
         num_qubits = env.circuit.num_qubits
         op_str = 'I' * num_qubits
         ideal_state = env.simulate_ideal()
-        for idx in range(num_qubits - 1): # 5
-            rand_obs_string = op_str
-            obs_ret = [np.eye(2) for _ in range(num_qubits)]
-            selected_qubits = [idx, idx + 1]
-            obs = Pauli(rand_obs_string)
-            obs_ret = np.array(obs_ret)
-            exp_ideal = ideal_state.probabilities(selected_qubits)
-            if (param * 10) % 2 < 1e-5:
-                min_noise = 0.05
-            else:
-                min_noise = 0.02
-            for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
-                exp_noisy = env.simulate_noisy(noise_scale).probabilities(selected_qubits)
-                # for _ in range(100):
-                #     # sample_noisy = env.sample_noisy(noise_scale, obs)
-                #     sample_noisy = np.random.normal(exp_noisy, 0.0001)
-                dataset.append([param, obs_ret, selected_qubits, noise_scale, exp_noisy, exp_ideal])
-    out_path = os.path.join(args.out_root, 'dataset_vqe4l.pkl')
+        exp_ideal = ideal_state.probabilities()
+        encoder = env.circuit.copy()
+
+        for state_idx, state in tqdm(enumerate(states)):
+            base_circuit = QuantumCircuit(num_qubits)
+            state = switch_little_big_endian_state(state)
+            base_circuit.initialize(state, range(num_qubits))
+            base_circuit = base_circuit.compose(encoder)
+            for idx in range(num_qubits):
+                for obs1 in paulis:
+                    circuit = base_circuit.copy()
+                    if obs1 == 'X':
+                        circuit.h(num_qubits - 1 - idx)
+                    elif obs1 == 'Y':
+                        circuit.sdg(num_qubits - 1 - idx)
+                        circuit.h(num_qubits - 1 - idx)
+                    obs_ret = [np.eye(2) for _ in range(num_qubits)]
+                    obs_ret[idx] = Pauli(obs1).to_matrix()
+                    selected_qubits = [idx, idx + 1]
+                    obs_ret = np.array(obs_ret)
+                    for noise_scale in np.round(np.arange(0.05, 0.29, 0.01), 3): # 10
+                        exp_noisy = env.simulate_noisy(noise_scale, circuit).probabilities([num_qubits - 1 - idx])
+                        dataset.append([state_idx, obs_ret, selected_qubits, noise_scale, exp_noisy, exp_ideal])
+
+    out_path = os.path.join(args.out_root, 'dataset_ae6l.pkl')
     with open(out_path, 'wb') as f:
         pickle.dump(dataset, f)
     print(f'Generation finished. File saved to {out_path}')
@@ -244,48 +256,20 @@ def gen_test_data_pauli(args):
     print(f'Generation finished. File saved to {out_test}')
 
 
-def gen_test_data_pauli_v3(args):
-    dataset = []
-    paulis = ['X', 'Y', 'Z']
-
-    for env_name in tqdm(os.listdir(args.env_test)):
-        param = float(env_name.replace('.pkl', '').split('_')[-1])
-        env_path = os.path.join(args.env_test, env_name)
-        env = IBMQEnv.load(env_path)
-        num_qubits = env.circuit.num_qubits
-        op_str = 'I' * num_qubits
-        ideal_state = env.simulate_ideal()
-        for idx in range(num_qubits - 1): # 5
-            rand_obs_string = op_str
-            obs_ret = [np.eye(2) for _ in range(num_qubits)]
-            selected_qubits = [idx, idx + 1]
-            obs = Pauli(rand_obs_string)
-            obs_ret = np.array(obs_ret)
-            exp_ideal = ideal_state.probabilities(selected_qubits)
-            exp_noisy = env.simulate_noisy(0.05).probabilities(selected_qubits)
-            dataset.append([param, obs_ret, rand_obs_string, selected_qubits, 0.05, exp_noisy, exp_ideal])
-    
-    out_test = os.path.join(args.out_root, 'testset_train.pkl')
-    with open(out_test, 'wb') as f:
-        pickle.dump(dataset, f)
-    print(f'Generation finished. File saved to {out_test}')
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-root', default='../environments/phase_damping/vqe_envs_train_4l', type=str)
-    parser.add_argument('--env-test', default='../environments/phase_damping/vqe_envs_train_4l', type=str)
-    parser.add_argument('--out-root', default='../data_mitigate/non_markov_pd', type=str)
+    parser.add_argument('--env-root', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
+    parser.add_argument('--env-test', default='../environments/noise_models/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--out-root', default='../data_mitigate/phasedamp', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--num-data', default=20_000, type=int)  # 5000 for train
     args = parser.parse_args()
     
     if not os.path.exists(args.out_root):
         os.makedirs(args.out_root)
-    # gen_mitigation_data_pauli_v3(args)
-    # gen_test_data_pauli_v3(args)
-    gen_mitigation_data_pauli(args)
-    gen_test_data_pauli(args)
+    # gen_mitigation_data_pauli(args)
+    # gen_test_data_pauli(args)
+    gen_mitigation_data_pauli_distribution(args)
     # import subprocess
     # command = 'cd .. && python circuit.py --data-name vqe.pkl --train-name trainset_vqe.pkl --test-name testset_vqe.pkl --split'
     # subprocess.Popen(command, shell=True).wait()
