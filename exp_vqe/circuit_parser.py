@@ -15,6 +15,7 @@ class CircuitParser:
 
     def __init__(self):
         self.num_qubits = None
+        self.u3_index_mapping = {0: 2, 1: 0, 2: 1}  # index the location of parameters in u3 gate.
 
     def parse(self, qc):
         self.num_qubits = qc.num_qubits
@@ -63,7 +64,7 @@ class CircuitParser:
                 for gate in gates:
                     op_str = ['I'] * self.num_qubits
                     coupling = ['I'] * self.num_qubits
-                    param = gate.operation.params[2 - i] + np.pi / 2 * (i - 1)
+                    param = gate.operation.params[self.u3_index_mapping[i]] + np.pi / 2 * (i - 1)
                     qubit_index = gate.qubits[0].index
                     op_str[qubit_index] = pauli_strings[i]
                     coupling[qubit_index] = 'Z'
@@ -86,7 +87,7 @@ class CircuitParser:
                 couplings.append(''.join(coupling))
             for i in range(3):
                 op_str = ['I'] * self.num_qubits
-                param = (-1) ** (i + 1) * 0.25 * np.pi
+                param = 0.25 * np.pi * (-1) ** (i + 1)
                 op_str[qubits[0]] = pauli_strings[i][0]
                 op_str[qubits[1]] = pauli_strings[i][1]
                 op_strings.append(''.join(op_str))
@@ -111,13 +112,16 @@ class CircuitParser:
 
     
 if __name__ == '__main__':
-    with open('../environments/circuits/vqe_4l/vqe_0.4.pkl', 'rb') as f:
+    with open('../environments/circuits/vqe_3l/vqe_0.4.pkl', 'rb') as f:
         circuit = pickle.load(f)
     
     parser = CircuitParser()
     hs = parser.parse(circuit)
 
-    from hamiltonian_simulation import HamiltonianSimulator
-    backend = HamiltonianSimulator(num_qubits=4)
-    final_rho = backend.run(hs)
+    from hamiltonian_simulator import HamiltonianSimulator
+    from qiskit.quantum_info import Statevector
+    state = Statevector(circuit).data
+    backend = HamiltonianSimulator(noise_scale=0.3)
+    final_rho = backend.run(hs, verbose=True)
+    print(state.conj() @ final_rho @ state)
 

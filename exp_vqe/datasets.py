@@ -113,7 +113,7 @@ def gen_mitigation_data_pauli(args):
                 if (param * 10) % 2 < 1e-5:
                     min_noise = 0.05
                 else:
-                    min_noise = 0.02
+                    min_noise = 0.05
                 for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
                     # noise_scale = 0.01
                     # rho = env.simulate_noisy(noise_scale)

@@ -22,6 +22,7 @@ from qiskit.quantum_info.operators import Pauli
 from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex, add_miti_gates_to_circuit
 from utils import AverageMeter, ConfigDict, gen_rand_pauli
 from circuit_lib import *
+from hamiltonian_simulator import HamiltonianSimulator
 
 
 class IBMQEnv:

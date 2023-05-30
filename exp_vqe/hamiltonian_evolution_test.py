@@ -125,7 +125,12 @@ def test_cnot_evolution():
     print(out_rho.conj() @ output @ out_rho)
 
 
+def check_correctness_single_qubit():
+    ...
+
+
 if __name__ == '__main__':
     # test_multi_qubit_evolution()
-    test_cnot_evolution()
+    # test_cnot_evolution()
+    check_correctness_single_qubit()
     
