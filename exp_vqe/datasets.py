@@ -99,37 +99,25 @@ def gen_mitigation_data_pauli(args):
         op_str = 'I' * num_qubits
         ideal_state = env.simulate_ideal()
         for idx in range(num_qubits - 1): # 5
-            for obs1, obs2 in itertools.product(paulis, paulis): # 16
-                rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
-                if rand_obs_string == op_str: continue
-                obs_ret = [np.eye(2) for _ in range(num_qubits)]
-                # rand_obs = [Pauli(obs1).to_matrix(), Pauli(obs2).to_matrix()]
-                obs_ret[idx] = Pauli(obs1).to_matrix()
-                obs_ret[idx + 1] = Pauli(obs2).to_matrix()
-                selected_qubits = [idx, idx + 1]
-                obs = Pauli(rand_obs_string)
-                obs_ret = np.array(obs_ret)
-                exp_ideal = ideal_state.expectation_value(obs).real
-                if (param * 10) % 2 < 1e-5:
-                    min_noise = 0.05
-                else:
-                    min_noise = 0.05
-                for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
-                    # noise_scale = 0.01
-                    # rho = env.simulate_noisy(noise_scale)
-                    # exp_noisy = rho.expectation_value(obs).real
-                    # exp_s = env.sample_noisy(noise_scale, obs)
-                    # rho_p = partial_trace(env.state_table[0], selected_qubits, [2] * num_qubits)
-                    # exp_2 = np.trace(rho_p @ np.kron(obs_ret[0], obs_ret[1])).real
-                    # print(exp_noisy, exp_s, exp_2, exp_ideal)
-                    # assert False
-
-                    exp_noisy = env.simulate_noisy(noise_scale).expectation_value(obs).real
+            for noise_scale in np.round(np.arange(0.05, 0.29, 0.01), 3): # 10
+                noisy_state = env.simulate_noisy(noise_scale)
+                for obs1, obs2 in itertools.product(paulis, paulis): # 16
+                    rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
+                    if rand_obs_string == op_str: continue
+                    obs_ret = [np.eye(2) for _ in range(num_qubits)]
+                    # rand_obs = [Pauli(obs1).to_matrix(), Pauli(obs2).to_matrix()]
+                    obs_ret[idx] = Pauli(obs1).to_matrix()
+                    obs_ret[idx + 1] = Pauli(obs2).to_matrix()
+                    selected_qubits = [idx, idx + 1]
+                    obs = Pauli(rand_obs_string)
+                    obs_ret = np.array(obs_ret)
+                    exp_ideal = ideal_state.expectation_value(obs).real
+                    exp_noisy = noisy_state.expectation_value(obs).real
                     # for _ in range(100):
                     #     # sample_noisy = env.sample_noisy(noise_scale, obs)
                     #     sample_noisy = np.random.normal(exp_noisy, 0.0001)
                     dataset.append([param, obs_ret, selected_qubits, noise_scale, round(exp_noisy, 6), round(exp_ideal, 6)])
-    out_path = os.path.join(args.out_root, 'dataset_vqe4l.pkl')
+    out_path = os.path.join(args.out_root, args.out_train)
     with open(out_path, 'wb') as f:
         pickle.dump(dataset, f)
     print(f'Generation finished. File saved to {out_path}')
@@ -250,7 +238,7 @@ def gen_test_data_pauli(args):
                 exp_ideal = ideal_state.expectation_value(obs).real
                 exp_noisy = env.simulate_noisy(0.05).expectation_value(obs).real
                 dataset.append([param, obs_ret, rand_obs_string, selected_qubits, 0.05, round(exp_noisy, 6), round(exp_ideal, 6)])
-    out_test = os.path.join(args.out_root, 'testset_train.pkl')
+    out_test = os.path.join(args.out_root, args.out_test)
     with open(out_test, 'wb') as f:
         pickle.dump(dataset, f)
     print(f'Generation finished. File saved to {out_test}')
@@ -258,18 +246,20 @@ def gen_test_data_pauli(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-root', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
-    parser.add_argument('--env-test', default='../environments/noise_models/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--env-root', default='../environments/noise_models/phase_damping/vqe_h_train_2l', type=str)
+    parser.add_argument('--env-test', default='../environments/noise_models/phase_damping/vqe_h_train_2l', type=str)
     parser.add_argument('--out-root', default='../data_mitigate/phasedamp', type=str)
+    parser.add_argument('--out-train', default='dataset_vqe2l.pkl', type=str)
+    parser.add_argument('--out-test', default='testset_train.pkl', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--num-data', default=20_000, type=int)  # 5000 for train
     args = parser.parse_args()
     
     if not os.path.exists(args.out_root):
         os.makedirs(args.out_root)
-    # gen_mitigation_data_pauli(args)
-    # gen_test_data_pauli(args)
-    gen_mitigation_data_pauli_distribution(args)
+    gen_mitigation_data_pauli(args)
+    gen_test_data_pauli(args)
+    # gen_mitigation_data_pauli_distribution(args)
     # import subprocess
     # command = 'cd .. && python circuit.py --data-name vqe.pkl --train-name trainset_vqe.pkl --test-name testset_vqe.pkl --split'
     # subprocess.Popen(command, shell=True).wait()

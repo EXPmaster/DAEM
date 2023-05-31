@@ -112,7 +112,7 @@ class CircuitParser:
 
     
 if __name__ == '__main__':
-    with open('../environments/circuits/vqe_3l/vqe_0.4.pkl', 'rb') as f:
+    with open('../environments/circuits/vqe_2l/vqe_0.4.pkl', 'rb') as f:
         circuit = pickle.load(f)
     
     parser = CircuitParser()
@@ -121,7 +121,6 @@ if __name__ == '__main__':
     from hamiltonian_simulator import HamiltonianSimulator
     from qiskit.quantum_info import Statevector
     state = Statevector(circuit).data
-    backend = HamiltonianSimulator(noise_scale=0.3)
+    backend = HamiltonianSimulator(noise_scale=0.05)
     final_rho = backend.run(hs, verbose=True)
     print(state.conj() @ final_rho @ state)
-
