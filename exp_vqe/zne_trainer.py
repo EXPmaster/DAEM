@@ -8,51 +8,36 @@ import qiskit.providers.aer.noise as noise
 from qiskit.quantum_info.operators import Operator, Pauli
 from qiskit.quantum_info import Statevector
 from qiskit.opflow import PauliOp
+from qiskit.quantum_info import DensityMatrix
 
 from mitiq import cdr
 from mitiq.cdr import generate_training_circuits
 from mitiq.zne.scaling import fold_gates_at_random
 
+from circuit_parser import CircuitParser
+
 
 class ZNETrainer:
 
-    def __init__(self):
-        pass
+    def __init__(self, noisy_env):
+        self.env = noisy_env
 
-    def fit_and_predict(self, circuit, observable, backends):
+    def fit_and_predict(self, observable):
         # folded_circuit = fold_gates_at_random(circuit, 0.5)
-        noise_levels = np.round(np.arange(0.05, 0.29, 0.01), 3)
+        noise_levels = np.round(np.arange(0.05, 0.29, 0.05), 3)
         noisy_results = []
-        # func = lambda x: 0.2 * np.sqrt(1 - np.exp(-(1 - np.cos(25 * np.arctan(x))) / (1 + x ** 2) ** (25 / 2)))
-        # func = lambda x: 0.2 * (1 - np.exp(-(1 - np.cos(15 * np.arctan(x))) / (1 + x ** 2) ** (15 / 2)))
         for n in noise_levels:
-            noise_model = backends[n]
-            # error_1 = noise.depolarizing_error(n, 1)  # single qubit gates
-            # # error_2 = noise.depolarizing_error(n, 2)
-            # # error_1 = noise.amplitude_damping_error(n)
-            # # error_2 = error_1.tensor(error_1)
-            # noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
-            # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
-            # noise_model = NoiseModel()
-            # for j in range(12):
-            #     error_1 = noise.amplitude_damping_error(func(n))
-            #     noise_model.add_all_qubit_quantum_error(error_1, f"parameter_{j}", range(circuit.num_qubits))
-            #     noise_model.add_basis_gates(['u'])
-            noisy_results.append(self.simulate_noisy(circuit, observable, noise_model))
+            noisy_results.append(self.simulate_noisy(observable, n))
         noisy_results = np.array(noisy_results)
         params = np.polyfit(noise_levels, noisy_results, deg=2)
         return params  # [-1]
 
-    def simulate_ideal(self, circuit, observable):
-        state_vector = Statevector(circuit)
+    def simulate_ideal(self, observable):
+        state_vector = self.env.simulate_ideal()
         return state_vector.expectation_value(observable).real
         
-    def simulate_noisy(self, circuit, observable, noise_model):
-        circuit = circuit.copy()
-        circuit.save_density_matrix()
-        noisy_backend = noise_model  # AerSimulator(noise_model=noise_model)
-        noisy_result = noisy_backend.run(transpile(circuit, noisy_backend, optimization_level=0)).result()
-        density_matrix = noisy_result.data()['density_matrix']
+    def simulate_noisy(self, observable, noise_scale):
+        density_matrix = self.env.simulate_noisy(noise_scale)
         return density_matrix.expectation_value(observable).real
 
 
