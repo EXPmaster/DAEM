@@ -24,12 +24,12 @@ class ZNETrainer:
 
     def fit_and_predict(self, observable):
         # folded_circuit = fold_gates_at_random(circuit, 0.5)
-        noise_levels = np.round(np.arange(0.05, 0.29, 0.05), 3)
+        noise_levels = np.round(np.arange(0.02, 0.29, 0.01), 3)
         noisy_results = []
         for n in noise_levels:
             noisy_results.append(self.simulate_noisy(observable, n))
         noisy_results = np.array(noisy_results)
-        params = np.polyfit(noise_levels, noisy_results, deg=2)
+        params = np.polyfit(noise_levels, noisy_results, deg=3)
         return params  # [-1]
 
     def simulate_ideal(self, observable):

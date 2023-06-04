@@ -99,7 +99,12 @@ def gen_mitigation_data_pauli(args):
         op_str = 'I' * num_qubits
         ideal_state = env.simulate_ideal()
         for idx in range(num_qubits - 1): # 5
-            for noise_scale in np.round(np.arange(0.05, 0.29, 0.01), 3): # 10
+            # if abs(param - 1.0) < 1e-3:
+            if (param * 10) % 4 < 1e-3:
+                min_noise = 0.02
+            else:
+                min_noise = 0.05
+            for noise_scale in np.round(np.arange(min_noise, 0.29, 0.01), 3): # 10
                 noisy_state = env.simulate_noisy(noise_scale)
                 for obs1, obs2 in itertools.product(paulis, paulis): # 16
                     rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
@@ -246,11 +251,11 @@ def gen_test_data_pauli(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-root', default='../environments/noise_models/phase_damping/vqe_h_train_2l', type=str)
-    parser.add_argument('--env-test', default='../environments/noise_models/phase_damping/vqe_h_train_2l', type=str)
+    parser.add_argument('--env-root', default='../environments/noise_models/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--env-test', default='../environments/noise_models/phase_damping/vqe_envs_train_4l', type=str)
     parser.add_argument('--out-root', default='../data_mitigate/phasedamp', type=str)
-    parser.add_argument('--out-train', default='dataset_vqe2l.pkl', type=str)
-    parser.add_argument('--out-test', default='testset_train.pkl', type=str)
+    parser.add_argument('--out-train', default='dataset_vqe4l.pkl', type=str)
+    parser.add_argument('--out-test', default='testset_vqe4l.pkl', type=str)
     parser.add_argument('--num-ops', default=2, type=int)
     parser.add_argument('--num-data', default=20_000, type=int)  # 5000 for train
     args = parser.parse_args()

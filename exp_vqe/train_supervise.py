@@ -133,9 +133,9 @@ def validate(epoch, args, loader, model, loss_fn):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='MitigateDataset', type=str, help='[MitigateDataset]')
-    parser.add_argument('--miti-prob', action='store_true', default=True, help='mitigate probability distribution or expectation')
-    parser.add_argument('--train-path', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
+    parser.add_argument('--miti-prob', action='store_true', default=False, help='mitigate probability distribution or expectation')
+    parser.add_argument('--train-path', default='../data_mitigate/phasedamp/dataset_vqe4l.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/phasedamp/dataset_vqe4l.pkl', type=str)
     parser.add_argument('--logdir', default='../runs', type=str, help='path to save logs and models')
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
@@ -157,7 +157,7 @@ if __name__ == '__main__':
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(args.device)
     time_str = time.strftime('%Y-%m-%d-%H-%M')
-    args.logdir = os.path.join(args.logdir, f'env_ae_noef_pd_{time_str}')
+    args.logdir = os.path.join(args.logdir, f'env_vqe4l_noef_pd_{time_str}')
     if not os.path.exists(args.logdir):
         os.mkdir(args.logdir)
     args.writer = SummaryWriter(log_dir=args.logdir)

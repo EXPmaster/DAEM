@@ -22,7 +22,7 @@ from qiskit.quantum_info.operators import Pauli
 from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex, add_miti_gates_to_circuit
 from utils import AverageMeter, ConfigDict, gen_rand_pauli
 from circuit_lib import *
-from hamiltonian_simulator import HamiltonianSimulator
+from hamiltonian_simulator import HamiltonianSimulator, AnalyticSimulator
 from circuit_parser import CircuitParser
 
 
@@ -70,22 +70,22 @@ class IBMQEnv:
             func = lambda x: 1 - np.exp(-0.6 * (1 - (np.cos(5 * np.arctan(3 * x))) / (1 + (3 * x) ** 2) ** (5 / 2)))
             # angles = [np.exp(-1. / x) for x in angles]
             for i in np.round(np.arange(0, 0.3, 0.001), 3):
-                # noise_model = NoiseModel()
-                # for j in range(len(angles)):
-                #     # error_1 = noise.amplitude_damping_error(func(i * angles[j] / 10))
-                #     # error_1 = noise.depolarizing_error(i, 1)
-                #     error_1 = noise.phase_damping_error(i)
-                #     # error_1 = noise.phase_damping_error(func(i * angles[j] / 10))
-                #     noise_model.add_all_qubit_quantum_error(error_1, f"parameter_{j}", range(self.circuit.num_qubits))
-                #     noise_model.add_basis_gates(['u', 'u3'])
-                # # error_1 = noise.amplitude_damping_error(i)  # noise.depolarizing_error(i, 1)  # single qubit gates
-                # # # error_1 = noise.depolarizing_error(i, 1)
-                # # # error_2 = noise.depolarizing_error(i, 2)
-                # # error_2 = error_1.tensor(error_1)
-                # # noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
-                # # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
-                # self.backends[i] = AerSimulator(noise_model=noise_model)
-                self.backends[i] = HamiltonianSimulator(i)
+                noise_model = NoiseModel()
+                for j in range(len(angles)):
+                    # error_1 = noise.amplitude_damping_error(func(i * angles[j] / 10))
+                    # error_1 = noise.depolarizing_error(i, 1)
+                    # error_1 = noise.phase_damping_error(i)
+                    error_1 = noise.phase_damping_error(func(i * angles[j] / 10))
+                    noise_model.add_all_qubit_quantum_error(error_1, f"parameter_{j}", range(self.circuit.num_qubits))
+                    noise_model.add_basis_gates(['u', 'u3'])
+                # error_1 = noise.amplitude_damping_error(i)  # noise.depolarizing_error(i, 1)  # single qubit gates
+                # # error_1 = noise.depolarizing_error(i, 1)
+                # # error_2 = noise.depolarizing_error(i, 2)
+                # error_2 = error_1.tensor(error_1)
+                # noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
+                # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+                self.backends[i] = AerSimulator(noise_model=noise_model)
+                # self.backends[i] = AnalyticSimulator(i)  # HamiltonianSimulator(i)
 
             # self.state_table = self.build_state_table()
 
@@ -297,8 +297,8 @@ if __name__ == '__main__':
     # env = IBMQEnv(args)
     # env.save(args.env_path)
     # print(env.circuit)
-    vqe_circuit_path = '../environments/circuits/vqe_2l'
-    save_root = '../environments/noise_models/phase_damping/vqe_h_train_2l'
+    vqe_circuit_path = '../environments/circuits/vqe_4l'
+    save_root = '../environments/noise_models/phase_damping/vqe_h_train_4l'
     build_env_vqe(args, vqe_circuit_path, save_root)
 
     # vqe_circuit_path = '../environments/circuits_test_4l'

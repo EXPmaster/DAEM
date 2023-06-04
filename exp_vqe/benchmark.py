@@ -149,93 +149,7 @@ def evaluation():
 
 
 @torch.no_grad()
-def eval_testset():
-    backend = Aer.get_backend('aer_simulator')
-    paulis = [Pauli(x).to_matrix() for x in ('X', 'Y', 'Z')]
-    envs = {}
-    for env_name in os.listdir(args.env_path):
-        param = float(env_name.replace('.pkl', '').split('_')[-1])
-        env_path = os.path.join(args.env_path, env_name)
-        envs[param] = IBMQEnv.load(env_path)
-
-    eval_results = []
-    # load GAN model
-    ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = Generator(args.num_mitigates)
-    model_g.load_state_dict(ckpt['model_g'], strict=False)
-    model_g.load_envs(args, force=True)
-    model_g.to(args.device)
-    model_g.eval()
-
-    with open(args.testset, 'rb') as f:
-        testset = pickle.load(f)
-
-    mitigated_diff_gan = []
-    raw_diff = []
-    mitigated_diff_cdr = []
-    mitigated_diff_zne = []
-    mitigated_diff_lbem = []
-
-    for params, obs, rand_obs_string, pos, scale, exp_noisy, exp_ideal in tqdm(testset):
-        circuit = envs[params].circuit
-        observable = PauliOp(Pauli(rand_obs_string))
-        noise_backend = envs[params].backends[scale]
-
-        # CDR
-        cdr_model = CDRTrainer(envs[0.4].backends[0.05])
-        cdr_model.fit(envs[0.4].circuit, observable)
-        # ZNE
-        zne_model = ZNETrainer()
-        # # LBEM
-        # lbem_model = LBEMTrainer2(noise_model)
-
-
-        circuit_ideal = circuit.copy()
-        circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
-        state_vec = results.get_statevector(circuit)
-
-        circuit_noisy = circuit.copy()
-        circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
-        density_matrix = results.data()['density_matrix']
-
-        num_qubits = circuit.num_qubits
-        
-        meas_ideal = state_vec.expectation_value(observable).real
-        meas_noisy = density_matrix.expectation_value(observable).real
-        raw_diff.append(abs(meas_ideal - meas_noisy))
-        
-        # GAN prediction
-        obs_kron = np.kron(obs[0], obs[1])
-        obs_kron = torch.tensor(obs_kron, dtype=torch.cfloat)[None].to(args.device)
-        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
-        param = torch.FloatTensor([params])[None].to(args.device)
-        pos = torch.tensor(pos)[None].to(args.device)
-        scale = torch.FloatTensor([0.])[None].to(args.device)
-        param_cvt = torch.tensor([np.rint((params - 0.4) * 5)], dtype=int)[None].to(args.device)
-        predicts = []
-        for _ in range(100):
-            noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
-            prs = model_g(noise, param, obs, pos, scale)
-            preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
-            predicts.append(preds)
-        predicts = torch.stack(predicts).mean(0).item()
-        mitigated_diff_gan.append(abs(meas_ideal - predicts))
-        
-        # CDR prediction
-        cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
-        mitigated_diff_cdr.append(abs(cdr_predicts - meas_ideal))
-
-        # ZNE prediction
-        zne_predicts = zne_model.fit_and_predict(circuit, observable)
-        mitigated_diff_zne.append(abs(zne_predicts - meas_ideal))
-
-    print(np.mean(raw_diff), np.mean(mitigated_diff_gan), np.mean(mitigated_diff_cdr), np.mean(mitigated_diff_zne))
-
-
-@torch.no_grad()
-def evaluate_arbitrary():
+def evaluate_testset():
     backend = Aer.get_backend('aer_simulator')
     paulis = [Pauli(x).to_matrix() for x in ('X', 'Y', 'Z')]
     envs = {}
@@ -265,55 +179,26 @@ def evaluate_arbitrary():
         if params not in all_results:
             all_results[params] = [[], [], [], []]  # [raw, gan, cdr, zne]
 
-        circuit = envs[params].circuit
         observable = PauliOp(Pauli(rand_obs_string))
-        noise_backend = envs[params].backends[scale]
+        # noise_backend = envs[params].backends[scale]
 
         # # CDR
         # cdr_model = CDRTrainer(envs[0.4].backends[0.05])
         # cdr_model.fit(envs[0.4].circuit, observable)
         # ZNE
-        zne_model = ZNETrainer()
+        zne_model = ZNETrainer(envs[params])
 
-        circuit_ideal = circuit.copy()
-        circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
-        state_vec = results.get_statevector(circuit)
-
-        circuit_noisy = circuit.copy()
-        circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
-        density_matrix = results.data()['density_matrix']
-
-        num_qubits = circuit.num_qubits
-        
-        meas_ideal = state_vec.expectation_value(observable).real
-        meas_noisy = density_matrix.expectation_value(observable).real
+        # state_vec = envs[params].simulate_ideal()
+        # density_matrix = envs[params].simulate_noisy(scale)
+        meas_ideal = exp_ideal
+        meas_noisy = exp_noisy
         all_results[params][0].append(abs(meas_ideal - meas_noisy))
         
-        # GAN prediction
-        # obs_kron = np.kron(obs[0], obs[1])
-        obs_kron = np.kron(obs[pos[0]], obs[pos[1]])
-        obs_kron = torch.tensor(obs_kron, dtype=torch.cfloat)[None].to(args.device)
+        # Model prediction
         obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
         param = torch.FloatTensor([params])[None].to(args.device)
         pos = torch.tensor(pos)[None].to(args.device)
         scale = torch.FloatTensor([0.])[None].to(args.device)
-        param_cvt = torch.tensor([np.rint((params - 0.4) * 10)], dtype=int)[None].to(args.device)
-        predicts = []
-        # for _ in range(100):
-        #     # print(rand_obs_string)
-        #     noise = torch.randn(1, 64, dtype=torch.float, device=args.device)
-        #     prs = model_g(noise, param, obs, pos, scale)
-        #     # arr = prs.cpu().numpy().ravel()
-        #     # fig = plt.figure()
-        #     # plt.bar(np.arange(len(arr)), arr)
-        #     # plt.savefig('../imgs/quasiprob.png')
-
-        #     # assert False
-        #     preds = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs)
-        #     predicts.append(preds)
-        # predicts = torch.stack(predicts).mean(0).item()
         predicts = model_g(param, obs, pos, scale).squeeze().item()
         # prs = model_g(param, obs, pos, scale)
         # predicts = model_g.expectation_from_prs(param_cvt, obs_kron, pos, prs).squeeze().item()
@@ -324,12 +209,12 @@ def evaluate_arbitrary():
         # all_results[params][2].append(abs(cdr_predicts - meas_ideal))
 
         # ZNE prediction
-        zne_predicts = zne_model.fit_and_predict(circuit, observable, envs[params].backends)[-1]
+        zne_predicts = zne_model.fit_and_predict(observable)[-1]
         all_results[params][3].append(abs(zne_predicts - meas_ideal))
 
     parameters = []
     diffs_raw = []
-    diffs_gan = []
+    diffs_sup = []
     # diffs_cdr = []
     diffs_zne = []
 
@@ -337,20 +222,20 @@ def evaluate_arbitrary():
     for key, val in all_results.items():
         parameters.append(key)
         diffs_raw.append(np.mean(val[0]))
-        diffs_gan.append(np.mean(val[1]))
+        diffs_sup.append(np.mean(val[1]))
         # diffs_cdr.append(np.mean(val[2]))
         diffs_zne.append(np.mean(val[3]))
 
     fig = plt.figure()
     plt.plot(parameters, diffs_raw)
-    plt.plot(parameters, diffs_gan)
+    plt.plot(parameters, diffs_sup)
     # plt.plot(parameters, diffs_cdr)
     plt.plot(parameters, diffs_zne)
     # plt.xscale('log')
     plt.legend(['w/o mitigation', 'Supervise mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_gd_phasedamp.png')
+    plt.savefig('../imgs/comp_exp_phasedamp_vqe4l.png')
 
 
 @torch.no_grad()
@@ -383,8 +268,9 @@ def evaluate_different_noise_scale():
         noise_backend = envs[params].backends[scale]
         circuit_noisy = circuit.copy()
         circuit_noisy.save_density_matrix()
-        results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
-        density_matrix = results.data()['density_matrix']
+        # results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
+        # density_matrix = results.data()['density_matrix']
+        density_matrix = noise_backend.run(circuit_noisy)
         num_qubits = circuit.num_qubits
         meas_noisy = density_matrix.expectation_value(observable).real
 
@@ -570,9 +456,9 @@ def evaluate_ae():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-path', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_ae_noef_pd_2023-05-17-08-34/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
+    parser.add_argument('--env-path', default='../environments/noise_models/phase_damping/vqe_envs_train_4l', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe4l_noef_pd_2023-06-04-00-09/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/phasedamp/testset_vqe4l.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -581,7 +467,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    evaluate_ae()
-    # evaluate_arbitrary()
+    # evaluate_ae()
+    evaluate_testset()
     # evaluate_different_noise_scale()
 
