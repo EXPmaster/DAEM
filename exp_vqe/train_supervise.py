@@ -67,17 +67,18 @@ def cal_high_order_derivative(y, x, order=2):
 def train(epoch, args, loader, model, loss_fn, optimizer):
     model.train()
 
-    for itr, (params, params_cvt, obs, obs_kron, pos, scale, exp_noisy, _) in enumerate(loader):
+    for itr, (params, params_cvt, obs, obs_kron, pos, scale, exp_noisy, gts) in enumerate(loader):
 
         params_cvt = params_cvt.to(args.device)
         params, obs, pos, scale = params.to(args.device), obs.to(args.device), pos.to(args.device), scale.to(args.device)
+        gts = gts.to(args.device)
         obs_kron = obs_kron.to(args.device)
         exp_noisy = exp_noisy.to(args.device)
         # quasi_prob = quasi_prob.to(args.device)
         optimizer.zero_grad()
         # fake = model.expectation_from_prs(params_cvt, obs_kron, pos, model(params, obs, pos, scale))
-        fake = model(params, obs, pos, scale)
-        loss_real = loss_fn(fake, exp_noisy)
+        fake = model(params, obs, pos, scale, exp_noisy)
+        loss_real = loss_fn(fake, gts)
         loss_real.backward()
 
         # scale = (torch.rand((len(params), 1)) * 0.2).to(args.device)
@@ -111,14 +112,14 @@ def validate(epoch, args, loader, model, loss_fn):
         # predicts = []
         # prs = model(params, obs, pos, scale)
         # preds = model.expectation_from_prs(params_cvt, obs_kron, pos, prs)
-        preds = model(params, obs, pos, scale)
+        preds = model(params, obs, pos, scale, exp_noisy)
         # predicts.append(preds)
         # predicts = torch.stack(predicts).mean(0)
         if args.miti_prob:
-            diff = nn.CosineSimilarity()(preds.softmax(1), exp_noisy).mean().item()
+            diff = nn.CosineSimilarity()(preds.softmax(1), gts).mean().item()
             # unmitigated_metric.update(nn.CosineSimilarity()(exp_noisy.softmax(1), gts).mean().item())
         else:
-            diff = abs_deviation(preds, exp_noisy)
+            diff = abs_deviation(preds, gts)
         metric.update(diff)
 
     value = metric.getval()
@@ -134,8 +135,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='MitigateDataset', type=str, help='[MitigateDataset]')
     parser.add_argument('--miti-prob', action='store_true', default=True, help='mitigate probability distribution or expectation')
-    parser.add_argument('--train-path', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
-    parser.add_argument('--test-path', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
+    parser.add_argument('--train-path', default='../data_mitigate/phasedamp_distr/new_train_ae6l.pkl', type=str)
+    parser.add_argument('--test-path', default='../data_mitigate/phasedamp_distr/new_val_ae6l.pkl', type=str)
     parser.add_argument('--logdir', default='../runs', type=str, help='path to save logs and models')
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
@@ -157,7 +158,7 @@ if __name__ == '__main__':
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(args.device)
     time_str = time.strftime('%Y-%m-%d-%H-%M')
-    args.logdir = os.path.join(args.logdir, f'env_ae_noef_pd_{time_str}')
+    args.logdir = os.path.join(args.logdir, f'env_ae6l_new_pd_{time_str}')
     if not os.path.exists(args.logdir):
         os.mkdir(args.logdir)
     args.writer = SummaryWriter(log_dir=args.logdir)

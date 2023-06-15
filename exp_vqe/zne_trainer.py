@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import functools
+import matplotlib.pyplot as plt
 from qiskit import transpile
 from qiskit.providers.aer import AerSimulator
 from qiskit.providers.aer.noise import NoiseModel
@@ -19,15 +20,15 @@ from circuit_parser import CircuitParser
 
 class ZNETrainer:
 
-    def __init__(self, noisy_env):
+    def __init__(self, noisy_env=None):
         self.env = noisy_env
 
-    def fit_and_predict(self, observable):
+    def fit_and_predict(self, exps):
         # folded_circuit = fold_gates_at_random(circuit, 0.5)
-        noise_levels = np.round(np.arange(0.05, 0.29, 0.05), 3)
-        noisy_results = []
-        for n in noise_levels:
-            noisy_results.append(self.simulate_noisy(observable, n))
+        noise_levels = np.round(np.arange(0.05, 0.29, 0.02), 3)
+        noisy_results = exps
+        # for n in noise_levels:
+        #     noisy_results.append(self.simulate_noisy(observable, n))
         noisy_results = np.array(noisy_results)
         params = np.polyfit(noise_levels, noisy_results, deg=2)
         return params  # [-1]
@@ -39,6 +40,16 @@ class ZNETrainer:
     def simulate_noisy(self, observable, noise_scale):
         density_matrix = self.env.simulate_noisy(noise_scale)
         return density_matrix.expectation_value(observable).real
+
+    def plot_fig(self, exps):
+        scales = np.round(np.arange(0.05, 0.29, 0.02), 3)
+        fig = plt.figure()
+        plt.plot(scales, exps)
+        # plt.xscale('log')
+        plt.legend(['simulation'])
+        plt.xlabel('Noise scale')
+        plt.ylabel('Expectation of observable')
+        plt.savefig('../imgs/results_diff_scales_new_pd.png')
 
 
 if __name__ == '__main__':

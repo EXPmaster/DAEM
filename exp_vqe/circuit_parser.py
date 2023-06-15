@@ -4,6 +4,7 @@ from collections import OrderedDict, namedtuple
 import numpy as np
 from qiskit.quantum_info.operators import Pauli
 from qiskit.opflow import PauliOp
+from scipy.stats import rv_continuous
 
 
 class CircuitParser:
@@ -17,7 +18,7 @@ class CircuitParser:
         self.num_qubits = None
         self.u3_index_mapping = {0: 2, 1: 0, 2: 1}  # index the location of parameters in u3 gate.
 
-    def parse(self, qc):
+    def parse(self, qc, return_hamiltonian=True):
         self.num_qubits = qc.num_qubits
         parsed_operators = OrderedDict()
         gates_to_be_parsed = []
@@ -34,23 +35,26 @@ class CircuitParser:
             elif len(qubit_indices) == 2:
                 # Parse CNOT immediately. If there are other gates in the gates_to_be_parsed, parse them first
                 if len(gates_to_be_parsed):
-                    parsed_operators[f'layer{layer}'] = self._parse_operator(gates_to_be_parsed, 'u')
+                    parsed_operators[layer] = self._parse_operator(gates_to_be_parsed, 'u')
                     layer += 1
                     qubit_list = []
                     gates_to_be_parsed = []
-                parsed_operators[f'layer{layer}'] = self._parse_operator([gate], 'cx')
+                parsed_operators[layer] = self._parse_operator([gate], 'cx')
                 layer += 1
             else:
                 # Meet redundant qubit index. Parse the previous ones.
-                parsed_operators[f'layer{layer}'] = self._parse_operator(gates_to_be_parsed, 'u')
+                parsed_operators[layer] = self._parse_operator(gates_to_be_parsed, 'u')
                 layer += 1
                 qubit_list = qubit_indices
                 gates_to_be_parsed = [gate]
                     
         if len(gates_to_be_parsed):
-            parsed_operators[f'layer{layer}'] = self._parse_operator(gates_to_be_parsed, 'u')
+            parsed_operators[layer] = self._parse_operator(gates_to_be_parsed, 'u')
 
-        hamiltonians = self._construct_hamiltonian(parsed_operators)
+        if return_hamiltonian:
+            hamiltonians = self._construct_hamiltonian(parsed_operators)
+        else:
+            hamiltonians = parsed_operators
         return hamiltonians
 
     def _parse_operator(self, gates, gate_type):
@@ -93,6 +97,9 @@ class CircuitParser:
                 op_strings.append(''.join(op_str))
                 params.append(param)
             operators.append(self.Operator(op_strings, params, couplings))
+        
+        else:
+            raise ValueError(f'Unknown gate type {gate_type}.')
 
         return operators
 
@@ -110,6 +117,62 @@ class CircuitParser:
                 layerwise_hamiltonians.append(self.Hamiltonian(system_hamiltonian, bath_hamiltonian))
         return layerwise_hamiltonians
 
+    def construct_train(self, circuit, train_num=1):
+        op_string_map = {
+            'ZIII': 'ZIII', 'IZII': 'ZZII', 'IIZI': 'IZZI', 'IIIZ': 'IIZZ',
+            'XIII': 'XXXX', 'IXII': 'IXXX', 'IIXI': 'IIXX', 'IIIX': 'IIIX',
+        }
+        """Construct training circuit Hamiltonians from given Hamiltonian."""
+        org_operators = self.parse(circuit, return_hamiltonian=False)
+        sin_sampler = sin_prob_dist(a=0, b=np.pi)
+        # for k, v in org_operators.items():
+        #     print(k, v)
+        # print('------------------')
+        # print(org_operators)
+        ret_hamils = []
+        for t_itr in range(train_num):
+            queue = []
+            circuit_hs = OrderedDict()
+            for layer, operator_list in org_operators.items():
+                indicator = sum(['ZX' in operator for operator in operator_list[0].op_str])
+                
+                if not indicator:
+                    if len(queue) == 1:
+                        ops = queue.pop(0)
+                        operators = []
+                        for i in range(len(ops)):
+                            op_str = [op_string_map[item] for item in ops[len(ops) - 1 - i].op_str]
+                            params = [-item for item in ops[len(ops) - 1 - i].params]
+                            couplings = operator_list[i].coupling
+                            operators.append(self.Operator(op_str, params, couplings))
+                        circuit_hs[layer] = operators
+                    else:
+                        ops = operator_list
+                        operators = []
+                        for i in range(len(ops)):
+                            op_str = ops[i].op_str
+                            if i != 1:
+                                params = 2 * np.pi * np.random.uniform(size=len(ops[i].params)) + np.pi / 2 * (i - 1)
+                            else:
+                                params = sin_sampler.rvs(size=len(ops[i].params))
+                            couplings = ops[i].coupling
+                            operators.append(self.Operator(op_str, params, couplings))
+                        circuit_hs[layer] = operators
+                        queue.append(operators)
+
+                else:
+                    circuit_hs[layer] = operator_list
+            H = self._construct_hamiltonian(circuit_hs)
+            ret_hamils.append(H)
+            
+        return ret_hamils
+
+
+class sin_prob_dist(rv_continuous):
+    def _pdf(self, theta):
+        # The 0.5 is so that the distribution is normalized
+        return 0.5 * np.sin(theta)
+
     
 if __name__ == '__main__':
     with open('../environments/circuits/vqe_4l/vqe_0.4.pkl', 'rb') as f:
@@ -117,11 +180,3 @@ if __name__ == '__main__':
     
     parser = CircuitParser()
     hs = parser.parse(circuit)
-
-    from hamiltonian_simulator import HamiltonianSimulator, AnalyticSimulator
-    from qiskit.quantum_info import Statevector
-    state = Statevector(circuit).data
-    # backend = HamiltonianSimulator(noise_scale=0.05)
-    backend = AnalyticSimulator(noise_scale=0.3)
-    final_rho = backend.run(hs, verbose=True)
-    print(state.conj() @ final_rho @ state)

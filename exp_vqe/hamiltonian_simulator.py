@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import os
 import sys
 import functools
+import itertools
 import numpy as np
 import scipy
 # import warnings
@@ -37,14 +38,16 @@ class HamiltonianSimulator(ABC):
             rho = np.outer(initial_state, initial_state.conj())
         else:
             rho = init_rho
+        idx = 0
         for hamiltonian in tqdm(hamiltonians, disable=not verbose, file=sys.__stdout__):
             system = hamiltonian.system.to_matrix()
-            # ideal evolution
-            if init_rho is None:
-                evolution_operator = scipy.linalg.expm(-1j * system)
-                rho = evolution_operator @ rho @ evolution_operator.conj().T
             # apply noise
             rho = self.forward_function(rho, hamiltonian)
+            # ideal evolution
+            if init_rho is None or (init_rho is not None and idx < len(hamiltonians) - 3):
+                evolution_operator = scipy.linalg.expm(-1j * system)
+                rho = evolution_operator @ rho @ evolution_operator.conj().T
+            idx += 1
         return rho
 
     def init_function(self):
@@ -56,7 +59,18 @@ class HamiltonianSimulator(ABC):
         """ Apply noise to the system."""
 
 
+class IdealSimulator(HamiltonianSimulator):
+
+    def __init__(self):
+        super().__init__(1.0)
+
+    def forward_function(self, rho, hamiltonian):
+        return rho
+
+
 class NonMarkovianSimulator(HamiltonianSimulator):
+    """Simulate the non-Markovian dephasing noise.
+    Note, the lamb shift is not considered for simplicity."""
 
     def __init__(self, noise_scale, alpha=0.0001, zeta=6, cutoff=3):
         super().__init__(noise_scale, alpha=alpha, zeta=zeta, cutoff=cutoff)
@@ -112,6 +126,40 @@ class NonMarkovianSimulator(HamiltonianSimulator):
 
 
 class DepolarizeSimulator(HamiltonianSimulator):
+
+    def __init__(self, noise_scale):
+        super().__init__(noise_scale)
+
+    def forward_function(self, rho, hamiltonian):
+        if isinstance(hamiltonian.system, PauliSumOp):
+            pauliops = hamiltonian.system.primitive
+        else:
+            pauliops = hamiltonian.system.oplist
+
+        for pauliop in pauliops:
+            if isinstance(pauliop, SparsePauliOp):
+                assert len(pauliop.paulis) == 1
+                pauli_string = pauliop.paulis[0]
+            else:
+                pauli_string = pauliop.primitive
+            noise_operator = []
+            
+            for p in pauli_string:
+                p = p.to_label()
+                if p == 'I':
+                    noise_operator.append(['I'])
+                else:
+                    noise_operator.append(['I', 'X', 'Y', 'Z'])
+            noise_strings = itertools.product(*noise_operator)
+            noise_operators = [Pauli(''.join(op)) for op in noise_strings]
+            probabilities = np.ones(len(noise_operators)) * self.noise_scale / len(noise_operators)
+            probabilities[0] = 1 - (len(noise_operators) - 1) * self.noise_scale / len(noise_operators)
+            rho = sum([prob * op.to_matrix() @ rho @ op.to_matrix()
+                        for prob, op in zip(probabilities, noise_operators)])
+        return rho
+
+
+class DephaseSimulator(HamiltonianSimulator):
 
     def __init__(self, noise_scale, alpha=1.0):
         super().__init__(noise_scale, alpha=alpha)
@@ -182,3 +230,37 @@ def xi_t(t, omega_0):
 
 def zeta_t(t, omega_0):
     return 0.5 * eta_t(t, omega_0)
+
+
+def cnots(dim):
+    from qiskit import QuantumCircuit
+    from qiskit.quantum_info import Operator
+    circ = QuantumCircuit(int(np.log2(dim)))
+    for i in range(circ.num_qubits - 1):
+        circ.cx(i, i + 1)
+    for i in range(circ.num_qubits - 1):
+        circ.cx(i, i + 1)
+    return Operator(circ.reverse_bits()).data
+
+
+if __name__ == '__main__':
+    import pickle
+    from qiskit.quantum_info import random_density_matrix, DensityMatrix, state_fidelity, Statevector
+    with open('../environments/circuits/vqe_4l/vqe_0.4.pkl', 'rb') as f:
+        circuit = pickle.load(f)
+    
+    parser = CircuitParser()
+    hs = parser.construct_train(circuit, train_num=1)
+    dim = hs[0][0].system.to_matrix().shape[0]
+    rho = random_density_matrix(2 ** 4).data
+    backend = IdealSimulator()
+    op = cnots(dim)
+    result = backend.run(hs[0], init_rho=rho)
+    rho_out = op @ rho @ op.conj().T
+    print(state_fidelity(DensityMatrix(rho_out), DensityMatrix(result)))
+
+
+    state = Statevector(circuit)
+    hs = parser.parse(circuit)
+    result = backend.run(hs)
+    print(state_fidelity(DensityMatrix(result), state))
