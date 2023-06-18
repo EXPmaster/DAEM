@@ -354,6 +354,100 @@ def evaluate_arbitrary():
 
 
 @torch.no_grad()
+def evaluate_new():
+    eval_results = []
+    # load GAN model
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = SuperviseModel(args.num_mitigates)
+    model_g.load_state_dict(ckpt['model_g'], strict=False)
+    # model_g.load_envs(args, force=True)
+    model_g.to(args.device)
+    model_g.eval()
+
+    with open(args.testset, 'rb') as f:
+        testset = pickle.load(f)
+
+    random.shuffle(testset)
+    # For all
+
+    all_results = {}
+
+    for params, obs, pos, scale, exp_noisy, exp_ideal in tqdm(testset):
+        if params not in all_results:
+            all_results[params] = [[], [], [], []]  # [raw, gan, cdr, zne]
+
+        # # CDR
+        # cdr_model = CDRTrainer(envs[0.4].backends[0.05])
+        # cdr_model.fit(envs[0.4].circuit, observable)
+        # ZNE
+        zne_model = ZNETrainer()
+        zne_predicts = zne_model.fit_and_predict(exp_noisy)[-1]
+        # zne_model.plot_fig(exp_noisy)
+        # assert False
+        meas_ideal = exp_ideal
+        meas_noisy = exp_noisy[0]
+        all_results[params][0].append(abs(meas_ideal - meas_noisy))
+        
+        # GAN prediction
+        # obs_kron = np.kron(obs[0], obs[1])
+        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
+        param = torch.FloatTensor([params])[None].to(args.device)
+        pos = torch.tensor(pos)[None].to(args.device)
+        scale = torch.FloatTensor([0.])[None].to(args.device)
+        exp_noisy = torch.tensor(exp_noisy)[None].to(args.device)
+        predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
+        all_results[params][1].append(abs(meas_ideal - predicts))
+        
+        # # CDR prediction
+        # cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
+        # all_results[params][2].append(abs(cdr_predicts - meas_ideal))
+
+        # ZNE prediction
+        all_results[params][3].append(abs(zne_predicts - meas_ideal))
+
+    parameters = []
+    diffs_raw = []
+    diffs_gan = []
+    # diffs_cdr = []
+    diffs_zne = []
+    std_raw = []
+    std_gan = []
+    std_zne = []
+
+    all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
+    for key, val in all_results.items():
+        parameters.append(key)
+        diffs_raw.append(np.mean(val[0]))
+        diffs_gan.append(np.mean(val[1]))
+        diffs_zne.append(np.mean(val[3]))
+        # diffs_raw.append(val[0])
+        # diffs_gan.append(val[1])
+        # diffs_zne.append(val[3])
+        std_raw.append(np.var(val[0]))
+        std_gan.append(np.var(val[1]))
+        std_zne.append(np.var(val[3]))
+
+    fig = plt.figure()
+    ax = plt.gca()
+    # plt.plot(parameters, diffs_raw)
+    # plt.plot(parameters, diffs_gan)
+    # # plt.plot(parameters, diffs_cdr)
+    # plt.plot(parameters, diffs_zne)
+    plt.errorbar(parameters, diffs_raw, yerr=std_raw, fmt='-o')
+    plt.errorbar(parameters, diffs_gan, yerr=std_gan, fmt='-o')
+    plt.errorbar(parameters, diffs_zne, yerr=std_zne, fmt='-o')
+    # plt.boxplot(diffs_raw)
+    # plt.boxplot(diffs_gan)
+    # plt.boxplot(diffs_zne)
+    # plt.xscale('log')
+    # ax.set_xticks([y + 1 for y in range(len(parameters))], labels=parameters)
+    plt.legend(['w/o mitigation', 'Supervise mitigation', 'ZNE mitigation'])
+    plt.xlabel('Coeff of Ising Model')
+    plt.ylabel('Mean Absolute Error')
+    plt.savefig('../imgs/comp_exp_pd_new.png')
+
+
+@torch.no_grad()
 def evaluate_different_noise_scale():
     backend = Aer.get_backend('aer_simulator')
     paulis = [Pauli(x).to_matrix() for x in ('I', 'X', 'Y', 'Z')]
@@ -442,18 +536,6 @@ def operator_2_norm(R):
 @torch.no_grad()
 def evaluate_ae():
     from qiskit.circuit.library.standard_gates import HGate, SdgGate, IGate
-    backend = Aer.get_backend('aer_simulator')
-    paulis = ['X', 'Y', 'Z']
-    NUM_HIDDEN = 4
-    envs = {}
-    env_name = os.listdir(args.env_path)[0]
-    env_path = os.path.join(args.env_path, env_name)
-    envs = IBMQEnv.load(env_path)
-
-    encoder = envs.circuit
-    decoder = encoder.inverse()
-    states = StateGenerator('cat', encoder.num_qubits, shuffle=False).dataset
-
     eval_results = []
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
@@ -463,116 +545,69 @@ def evaluate_ae():
     model_g.to(args.device)
     model_g.eval()
 
+    with open(args.testset, 'rb') as f:
+        testset = pickle.load(f)
+
+    random.shuffle(testset)
+    # For all
+
     all_results = {}
 
-    for params, state in tqdm(enumerate(states)):
+    for params, obs, pos, scale, exp_noisy, exp_ideal in tqdm(testset):
         if params not in all_results:
-            all_results[params] = [[], [], []]  # [raw, supervise, ideal]
-        
-        input_state = switch_little_big_endian_state(state)
-        # Construct original AE circuit for ideal and noisy simulation
-        circuit = QuantumCircuit(encoder.num_qubits)
-        circuit.initialize(input_state, range(encoder.num_qubits))
-        circuit = circuit.compose(encoder)
-        # for i in range(NUM_HIDDEN, encoder.num_qubits):
-        #     circuit.reset(i)
-        # circuit = circuit.compose(decoder)
-        
-        noise_backend = envs.backends[0.05]
+            all_results[params] = [[], [], [], []]  # [raw, gan, cdr, zne]
 
-        circuit_ideal = circuit.copy()
-        circuit_ideal.save_statevector()
-        results = backend.run(transpile(circuit_ideal, backend, optimization_level=0)).result()
-        state_vec = results.get_statevector(circuit).data
-
-        circuit_noisy = circuit.copy()
-        circuit_noisy.save_density_matrix()
-        results = backend.run(transpile(circuit_noisy, backend, optimization_level=0)).result()
-        # results = noise_backend.run(transpile(circuit_noisy, noise_backend, optimization_level=0)).result()
-        density_matrix = results.data()['density_matrix'].data
-
-        num_qubits = circuit.num_qubits
+        meas_ideal = exp_ideal
+        meas_noisy = exp_noisy[0]
+        all_results[params][0].append(np.inner(meas_ideal, meas_noisy) / np.linalg.norm(meas_ideal) / np.linalg.norm(meas_noisy))
         
-        # all_results[params][0].append((input_state.conj() @ density_matrix @ input_state).real)
-        # all_results[params][2].append(np.abs(np.dot(input_state, state_vec.conj())) ** 2)
-
-        shadow = np.zeros((2 ** num_qubits, 2 ** num_qubits), dtype=complex)
-        hadamard = HGate().to_matrix()
-        sdg = SdgGate().to_matrix()
-        identity = IGate().to_matrix()
-        zero_state = np.array([[1., 0.], [0., 0.]])
-        one_state = np.array([[0., 0.], [0., 1.]])
-        bit_states = [zero_state, one_state]
-        unitaries = {'X': hadamard, 'Y': hadamard @ sdg, 'Z': identity}
-        num_samples = 100_000
-        for itr in range(num_samples):
-            rho_snapshot = [1]
-            for idx in range(encoder.num_qubits):
-                rand_pauli = np.random.choice(paulis)
-                tmp_circuit = QuantumCircuit(num_qubits, 1)
-                tmp_circuit = tmp_circuit.compose(circuit)
-                if rand_pauli == 'X':
-                    tmp_circuit.h(idx)
-                elif rand_pauli == 'Y':
-                    tmp_circuit.sdg(idx)
-                    tmp_circuit.h(idx)
-                tmp_circuit.measure(idx, 0)
-                U = unitaries[rand_pauli]
-                results = backend.run(transpile(tmp_circuit, backend, optimization_level=0), shots=1).result().get_counts()
-                out_state_idx = 0 if '0' in results else 1
-                out_state = bit_states[out_state_idx]
-                local_rho = 3 * (U.conj().T @ out_state @ U) - identity
-                rho_snapshot = np.kron(local_rho, rho_snapshot)
-            shadow += rho_snapshot
-        shadow /= num_samples
-        # shadow /= np.trace(shadow)
-        
-        # Model prediction
+        # GAN prediction
+        # obs_kron = np.kron(obs[0], obs[1])
+        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
         param = torch.FloatTensor([params])[None].to(args.device)
+        pos = torch.tensor(pos)[None].to(args.device)
+        scale = torch.FloatTensor([0.])[None].to(args.device)
+        exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
+        predicts = model_g(param, obs, pos, scale, exp_noisy).softmax(-1).squeeze().cpu().numpy()
+        all_results[params][1].append(np.inner(meas_ideal, predicts) / np.linalg.norm(meas_ideal) / np.linalg.norm(predicts))
 
-        predicts = []
-        neural_shadow = model_g.construct_shadow(param, num_samples=100_000)
-        print(operator_2_norm(shadow - neural_shadow))
-        # print(state_vec.conj().T @ shadow @ state_vec)
-        print(np.trace(shadow.conj().T @ neural_shadow))
-        assert False
-        shadow_rho.reset(range(NUM_HIDDEN, encoder.num_qubits))
-        decoder_circuit = transpile(decoder, noise_backend, optimization_level=0)
-        out_density = shadow_rho.evolve(decoder_circuit).data
-
-        all_results[params][1].append((input_state.conj() @ out_density @ input_state).real)
-        print(all_results)
-        assert False
-        
     parameters = []
     diffs_raw = []
     diffs_gan = []
-    diffs_ideal = []
+    # diffs_cdr = []
+    diffs_zne = []
+    std_raw = []
+    std_gan = []
+    std_zne = []
 
     all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
     for key, val in all_results.items():
         parameters.append(key)
-        diffs_raw.append(np.mean(val[0]))
-        diffs_gan.append(np.mean(val[1]))
-        diffs_ideal.append(np.mean(val[2]))
-
+        # diffs_raw.append(np.mean(val[0]))
+        # diffs_gan.append(np.mean(val[1]))
+        diffs_raw.append(val[0])
+        diffs_gan.append(val[1])
+        # std_raw.append(np.var(val[0]))
+        # std_gan.append(np.var(val[1]))
+        # std_zne.append(np.var(val[3]))
+    data = [diffs_raw[0], diffs_gan[0]]
     fig = plt.figure()
-    plt.plot(parameters, diffs_raw)
-    plt.plot(parameters, diffs_gan)
-    # plt.plot(parameters, diffs_cdr)
-    plt.plot(parameters, diffs_ideal)
+    ax = plt.gca()
+    # plt.plot(parameters, diffs_zne)
+    plt.boxplot(data)
     # plt.xscale('log')
-    plt.legend(['w/o mitigation', 'Supervise mitigation', 'Ideal'])
+    ax.set_xticks([y + 1 for y in range(len(data))], labels=['raw', 'mitigate'])
+    # plt.legend(['w/o mitigation', 'Supervise mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_gd_phasedamp.png')
+    plt.savefig('../imgs/comp_exp_pd_ae6l.png')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_ae_noef_pd_2023-05-17-08-34/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/phasedamp/dataset_ae6l.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_ae6l_new_pd_2023-06-07-13-34/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/phasedamp_distr/new_val_ae6l.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -581,7 +616,5 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+    # evaluate_new()
     evaluate_ae()
-    # evaluate_arbitrary()
-    # evaluate_different_noise_scale()
-
