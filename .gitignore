@@ -9,4 +9,4 @@ data*/
 *.pt
 weights/
 runs/
-environments/
+environments/noise_models
