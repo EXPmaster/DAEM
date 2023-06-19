@@ -28,7 +28,7 @@ class CircuitParser:
             operation = gate.operation
             if operation.name == 'barrier':
                 continue
-            qubit_indices = [x.index for x in gate.qubits]
+            qubit_indices = [qc.find_bit(x).index for x in gate.qubits]  # [x.index for x in gate.qubits]
             if len(qubit_indices) == 1 and qubit_indices[0] not in qubit_list:
                 qubit_list.append(qubit_indices[0])
                 gates_to_be_parsed.append(gate)
@@ -68,14 +68,14 @@ class CircuitParser:
                 for gate in gates:
                     op_str = ['I'] * self.num_qubits
                     coupling = ['I'] * self.num_qubits
-                    param = gate.operation.params[self.u3_index_mapping[i]] + np.pi / 2 * (i - 1)
+                    param = float(gate.operation.params[self.u3_index_mapping[i]]) + np.pi / 2 * (i - 1)
                     qubit_index = gate.qubits[0].index
                     op_str[qubit_index] = pauli_strings[i]
                     coupling[qubit_index] = 'Z'
 
-                    op_strings.append(''.join(op_str))
+                    op_strings.append(''.join(op_str[::-1]))
                     params.append(param / 2)
-                    couplings.append(''.join(coupling))
+                    couplings.append(''.join(coupling[::-1]))
                 operators.append(self.Operator(op_strings, params, couplings))
 
         elif gate_type == 'cx':
@@ -88,13 +88,13 @@ class CircuitParser:
             for qubit_idx in qubits:
                 coupling = ['I'] * self.num_qubits
                 coupling[qubit_idx] = 'Z'
-                couplings.append(''.join(coupling))
+                couplings.append(''.join(coupling[::-1]))
             for i in range(3):
                 op_str = ['I'] * self.num_qubits
                 param = 0.25 * np.pi * (-1) ** (i + 1)
                 op_str[qubits[0]] = pauli_strings[i][0]
                 op_str[qubits[1]] = pauli_strings[i][1]
-                op_strings.append(''.join(op_str))
+                op_strings.append(''.join(op_str[::-1]))
                 params.append(param)
             operators.append(self.Operator(op_strings, params, couplings))
         
@@ -119,9 +119,13 @@ class CircuitParser:
 
     def construct_train(self, circuit, train_num=1):
         op_string_map = {
-            'ZIII': 'ZIII', 'IZII': 'ZZII', 'IIZI': 'IZZI', 'IIIZ': 'IIZZ',
-            'XIII': 'XXXX', 'IXII': 'IXXX', 'IIXI': 'IIXX', 'IIIX': 'IIIX',
+            'ZIII': 'ZZII', 'IZII': 'IZZI', 'IIZI': 'IIZZ', 'IIIZ': 'IIIZ',
+            'XIII': 'XIII', 'IXII': 'XXII', 'IIXI': 'XXXI', 'IIIX': 'XXXX',
         }
+        # op_string_map = {
+        #     'ZIIIII': 'ZIIIII', 'IZIIII': 'ZZIIII', 'IIZIII': 'ZZZIII', 'IIIZII': 'ZZZZII', 'IIIIZI': 'ZZZZZI', 'IIIIIZ': 'ZZZZZZ',
+        #     'XIIIII': 'XXIIII', 'IXIIII': 'IXXIII', 'IIXIII': 'IIXXII', 'IIIXII': 'IIIXXI', 'IIIIXI': 'IIIIXX', 'IIIIIX': 'IIIIIX'
+        # }
         """Construct training circuit Hamiltonians from given Hamiltonian."""
         org_operators = self.parse(circuit, return_hamiltonian=False)
         sin_sampler = sin_prob_dist(a=0, b=np.pi)
@@ -134,7 +138,7 @@ class CircuitParser:
             queue = []
             circuit_hs = OrderedDict()
             for layer, operator_list in org_operators.items():
-                indicator = sum(['ZX' in operator for operator in operator_list[0].op_str])
+                indicator = sum(['XZ' in operator for operator in operator_list[0].op_str])
                 
                 if not indicator:
                     if len(queue) == 1:

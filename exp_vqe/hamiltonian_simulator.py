@@ -240,15 +240,17 @@ def cnots(dim):
         circ.cx(i, i + 1)
     for i in range(circ.num_qubits - 1):
         circ.cx(i, i + 1)
-    return Operator(circ.reverse_bits()).data
+    return Operator(circ).data
 
 
 if __name__ == '__main__':
     import pickle
-    from qiskit.quantum_info import random_density_matrix, DensityMatrix, state_fidelity, Statevector
-    with open('../environments/circuits/vqe_4l/vqe_0.4.pkl', 'rb') as f:
+    from qiskit.quantum_info import random_density_matrix, DensityMatrix, state_fidelity, Statevector, Operator, Pauli
+    from qiskit.opflow import PauliOp
+    with open('../environments/circuits/vqe_4l/vqe_0.7.pkl', 'rb') as f:
         circuit = pickle.load(f)
-    
+    # circuit = transpile(circ, basis_gates=['cx', 'u'])
+
     parser = CircuitParser()
     hs = parser.construct_train(circuit, train_num=1)
     dim = hs[0][0].system.to_matrix().shape[0]
@@ -258,7 +260,6 @@ if __name__ == '__main__':
     result = backend.run(hs[0], init_rho=rho)
     rho_out = op @ rho @ op.conj().T
     print(state_fidelity(DensityMatrix(rho_out), DensityMatrix(result)))
-
 
     state = Statevector(circuit)
     hs = parser.parse(circuit)
