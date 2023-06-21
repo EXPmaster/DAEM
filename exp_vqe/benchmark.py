@@ -595,20 +595,20 @@ def evaluate_ae():
     fig = plt.figure()
     ax = plt.gca()
     # plt.plot(parameters, diffs_zne)
-    plt.boxplot(data)
+    plt.boxplot(data, showfliers=False)
     # plt.xscale('log')
     ax.set_xticks([y + 1 for y in range(len(data))], labels=['raw', 'mitigate'])
     # plt.legend(['w/o mitigation', 'Supervise mitigation', 'ZNE mitigation'])
-    plt.xlabel('Coeff of Ising Model')
-    plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_pd_ae6l.png')
+    # plt.xlabel('Coeff of Ising Model')
+    plt.ylabel('Cosine Similarity')
+    plt.savefig('../imgs/comp_exp_dep_ae6l.png')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_ad_2023-06-20-17-24/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/ampdamp/new_test_vqe4l.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_ae6l_new_dep_2023-06-21-14-20/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/depolarize_distr/new_test_ae6l.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -617,5 +617,5 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    evaluate_new()
-    # evaluate_ae()
+    # evaluate_new()
+    evaluate_ae()

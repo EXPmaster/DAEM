@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 import numpy as np
 import pathos
-import cirq
 from tqdm import tqdm
 
 from qiskit import QuantumCircuit
@@ -64,7 +63,7 @@ def cnots(dim):
         circ.cx(i, i + 1)
     for i in range(circ.num_qubits - 1):
         circ.cx(i, i + 1)
-    return Operator(circ.reverse_bits())
+    return Operator(circ)
 
 
 def gen_train_val_identity(args, miti_prob=False):
@@ -197,7 +196,7 @@ if __name__ == '__main__':
         os.makedirs(args.out_root)
 
     gen_train_val_identity(args, args.mitigate_prob)
-    # gen_test_identity(args, args.mitigate_prob)
+    gen_test_identity(args, args.mitigate_prob)
 
     # import subprocess
     # command = 'cd .. && python circuit.py --data-name vqe.pkl --train-name trainset_vqe.pkl --test-name testset_vqe.pkl --split'
