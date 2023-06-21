@@ -394,7 +394,7 @@ def evaluate_new():
         param = torch.FloatTensor([params])[None].to(args.device)
         pos = torch.tensor(pos)[None].to(args.device)
         scale = torch.FloatTensor([0.])[None].to(args.device)
-        exp_noisy = torch.tensor(exp_noisy)[None].to(args.device)
+        exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
         predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
         all_results[params][1].append(abs(meas_ideal - predicts))
         
@@ -416,6 +416,7 @@ def evaluate_new():
 
     all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
     for key, val in all_results.items():
+        # if key not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
         parameters.append(key)
         diffs_raw.append(np.mean(val[0]))
         diffs_gan.append(np.mean(val[1]))
@@ -423,19 +424,19 @@ def evaluate_new():
         # diffs_raw.append(val[0])
         # diffs_gan.append(val[1])
         # diffs_zne.append(val[3])
-        std_raw.append(np.var(val[0]))
-        std_gan.append(np.var(val[1]))
-        std_zne.append(np.var(val[3]))
+        # std_raw.append(np.var(val[0]))
+        # std_gan.append(np.var(val[1]))
+        # std_zne.append(np.var(val[3]))
 
     fig = plt.figure()
     ax = plt.gca()
-    # plt.plot(parameters, diffs_raw)
-    # plt.plot(parameters, diffs_gan)
-    # # plt.plot(parameters, diffs_cdr)
-    # plt.plot(parameters, diffs_zne)
-    plt.errorbar(parameters, diffs_raw, yerr=std_raw, fmt='-o')
-    plt.errorbar(parameters, diffs_gan, yerr=std_gan, fmt='-o')
-    plt.errorbar(parameters, diffs_zne, yerr=std_zne, fmt='-o')
+    plt.plot(parameters, diffs_raw)
+    plt.plot(parameters, diffs_gan)
+    # plt.plot(parameters, diffs_cdr)
+    plt.plot(parameters, diffs_zne)
+    # plt.errorbar(parameters, diffs_raw, yerr=std_raw, fmt='-o')
+    # plt.errorbar(parameters, diffs_gan, yerr=std_gan, fmt='-o')
+    # plt.errorbar(parameters, diffs_zne, yerr=std_zne, fmt='-o')
     # plt.boxplot(diffs_raw)
     # plt.boxplot(diffs_gan)
     # plt.boxplot(diffs_zne)
@@ -444,7 +445,7 @@ def evaluate_new():
     plt.legend(['w/o mitigation', 'Supervise mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_pd_new.png')
+    plt.savefig('../imgs/comp_exp_ad_new.png')
 
 
 @torch.no_grad()
@@ -606,8 +607,8 @@ def evaluate_ae():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/noise_models/phase_damping/ae_train_6l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_ae6l_new_pd_2023-06-07-13-34/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/phasedamp_distr/new_val_ae6l.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_ad_2023-06-20-17-24/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/ampdamp/new_test_vqe4l.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -616,5 +617,5 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # evaluate_new()
-    evaluate_ae()
+    evaluate_new()
+    # evaluate_ae()

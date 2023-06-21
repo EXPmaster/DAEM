@@ -90,10 +90,10 @@ class VQETrainer:
 
 
 if __name__ == '__main__':
-    trainer = VQETrainer(3, 4)
+    trainer = VQETrainer(4, 2)
     circuit = trainer.get_circuit()
     retry_iters = 100
-    save_root = '../environments/circuits/vqe_3l'
+    save_root = '../environments/circuits/vqe_4l'
     if not os.path.exists(save_root):
         os.makedirs(save_root)
     # for i, x in enumerate(np.arange(-1.95, 2.0, 0.1)):

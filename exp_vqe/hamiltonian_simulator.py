@@ -186,9 +186,46 @@ class DephaseSimulator(HamiltonianSimulator):
                     decay_rate = np.exp(-2 * self.alpha * self.noise_scale)
                     decay_mask = np.array([[1.0, decay_rate],
                                             [decay_rate, 1.0]])
-                noise_operator = np.kron(decay_mask, noise_operator)
+                noise_operator = np.kron(noise_operator, decay_mask)
 
             rho = noise_operator * rho
+        return rho
+
+
+class AmpdampSimulator(HamiltonianSimulator):
+
+    def __init__(self, noise_scale):
+        super().__init__(noise_scale)
+        self.noise_map = {
+            'I': np.eye(2),
+            'E0': np.diag([1., np.sqrt(1 - noise_scale)]),
+            'E1': np.array([[0., np.sqrt(noise_scale)], [0., 0.]])
+        }
+
+    def forward_function(self, rho, hamiltonian):
+        if isinstance(hamiltonian.system, PauliSumOp):
+            pauliops = hamiltonian.system.primitive
+        else:
+            pauliops = hamiltonian.system.oplist
+
+        for pauliop in pauliops:
+            if isinstance(pauliop, SparsePauliOp):
+                assert len(pauliop.paulis) == 1
+                pauli_string = pauliop.paulis[0]
+            else:
+                pauli_string = pauliop.primitive
+            noise_operator = []
+            
+            for p in pauli_string:
+                p = p.to_label()
+                if p == 'I':
+                    noise_operator.append(['I'])
+                else:
+                    noise_operator.append(['E0', 'E1'])
+            noise_strings = itertools.product(*noise_operator)
+            noise_operators = [functools.reduce(np.kron, [self.noise_map[x] for x in op]) for op in noise_strings]
+            rho = sum([op @ rho @ op.conj().T
+                        for op in noise_operators])
         return rho
 
 
@@ -247,14 +284,14 @@ if __name__ == '__main__':
     import pickle
     from qiskit.quantum_info import random_density_matrix, DensityMatrix, state_fidelity, Statevector, Operator, Pauli
     from qiskit.opflow import PauliOp
-    with open('../environments/circuits/vqe_4l/vqe_0.7.pkl', 'rb') as f:
+    with open('../environments/circuits/autoencoder_6l/ae_1.pkl', 'rb') as f:
         circuit = pickle.load(f)
     # circuit = transpile(circ, basis_gates=['cx', 'u'])
 
     parser = CircuitParser()
     hs = parser.construct_train(circuit, train_num=1)
     dim = hs[0][0].system.to_matrix().shape[0]
-    rho = random_density_matrix(2 ** 4).data
+    rho = random_density_matrix(2 ** 6).data
     backend = IdealSimulator()
     op = cnots(dim)
     result = backend.run(hs[0], init_rho=rho)

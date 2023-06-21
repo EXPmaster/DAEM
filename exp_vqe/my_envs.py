@@ -22,7 +22,7 @@ from qiskit.quantum_info.operators import Pauli
 from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex, add_miti_gates_to_circuit
 from utils import AverageMeter, ConfigDict, gen_rand_pauli
 from circuit_lib import *
-from hamiltonian_simulator import NonMarkovianSimulator, DepolarizeSimulator, DephaseSimulator
+from hamiltonian_simulator import NonMarkovianSimulator, DepolarizeSimulator, DephaseSimulator, AmpdampSimulator
 from circuit_parser import CircuitParser
 
 
@@ -72,7 +72,7 @@ class IBMQEnv:
                 # # noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
                 # # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
                 # self.backends[i] = AerSimulator(noise_model=noise_model)
-                self.backends[i] = NonMarkovianSimulator(i)  # DepolarizeSimulator(i)  # NonMarkovianSimulator(i)
+                self.backends[i] = DepolarizeSimulator(i)  # NonMarkovianSimulator(i)
 
             # self.state_table = self.build_state_table()
 
