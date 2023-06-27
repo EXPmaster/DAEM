@@ -102,23 +102,23 @@ class NonMarkovianSimulator(HamiltonianSimulator):
                 if p == 'Z':
                     decay_rate = np.exp(-2 * z_decay_fn(self.noise_scale, self.cutoff, self.alpha, self.zeta))
                     decay_mask = np.array([[1., decay_rate], [decay_rate, 1.]])
-                    basis_change = np.kron(np.eye(2), basis_change)
-                    bias = np.kron(np.zeros((2, 2)), bias)
+                    basis_change = np.kron(basis_change, np.eye(2))
+                    bias = np.kron(bias, np.zeros((2, 2)))
                 elif p == 'I':
                     decay_mask = np.ones((2, 2))
-                    basis_change = np.kron(np.eye(2), basis_change)
-                    bias = np.kron(np.zeros((2, 2)), bias)
+                    basis_change = np.kron(basis_change, np.eye(2))
+                    bias = np.kron(bias, np.zeros((2, 2)))
                 elif p == 'X':
                     decay_rate = np.exp(-zeta_t(self.noise_scale, parameter))
                     energy_change = np.exp(-eta_t(self.noise_scale, parameter))
                     decay_mask = np.array([[energy_change, decay_rate],
                                             [decay_rate, energy_change]])
-                    basis_change = np.kron(self.basis_change_matrix, basis_change)
-                    bias = np.kron(np.array([[energy_change * xi_t(self.noise_scale, parameter), 0.],
-                                                [0., 1 - 2 * energy_change * xi_t(self.noise_scale, parameter)]]), bias)
+                    basis_change = np.kron(basis_change, self.basis_change_matrix)
+                    bias = np.kron(bias, np.array([[energy_change * xi_t(self.noise_scale, parameter), 0.],
+                                                  [0., 1 - 2 * energy_change * xi_t(self.noise_scale, parameter)]]))
                 else:
                     raise ValueError('Invalid Pauli string.')
-                noise_operator = np.kron(decay_mask, noise_operator)
+                noise_operator = np.kron(noise_operator, decay_mask)
             
             rho = noise_operator * (basis_change @ rho @ basis_change) + bias
             rho = basis_change @ rho @ basis_change

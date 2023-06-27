@@ -14,21 +14,27 @@ from sklearn.linear_model import LinearRegression
 
 class CDRTrainer:
 
-    def __init__(self, noise_model):
-        self.noisy_backend = noise_model
+    def __init__(self, env_root):
+        self.envs = {}
+        for circuit_name in tqdm(os.listdir(env_root)):
+            param = float(circuit_name.replace('.pkl', '').split('_')[-1])
+            circuit_path = os.path.join(env_root, circuit_name)
+            self.env[param] = IBMQEnv(circ_path=circuit_path)
 
-    def fit(self, circuit, observable):
+    def fit(self, param, observable):
+        circuit = self.env[param].circuit
         circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
         training_circuits = generate_training_circuits(
             circuit,
             num_training_circuits=25,
-            fraction_non_clifford=0.1,
+            fraction_non_clifford=0.2,
         )
         ideal_results = []
         noisy_results = []
         for circuit in training_circuits:
+            circuit = transpile(circuit, basis_gates=['cx', 'u'])
             ideal_results.append(self._simulate_ideal(circuit, observable))
-            noisy_results.append(self._simulate_noisy(circuit, observable))
+            noisy_results.append(self.envs[param].simulate_noisy(0.05, circuit).expectation_value(observable).real)
         ideal_results = np.array(ideal_results).reshape(-1, 1)
         noisy_results = np.array(noisy_results).reshape(-1, 1)
         self.reg = LinearRegression()
@@ -41,7 +47,7 @@ class CDRTrainer:
         state_vector = Statevector(circuit)
         return state_vector.expectation_value(observable).real
         
-    def _simulate_noisy(self, circuit, observable):
+    def _simulate_noisy(self, param, circuit, observable):
         tcircuit = circuit.copy()
         tcircuit.save_density_matrix()
         noisy_result = self.noisy_backend.run(transpile(tcircuit, self.noisy_backend)).result()

@@ -75,6 +75,7 @@ def gen_train_val_identity(args, miti_prob=False):
     circ_parser = CircuitParser()
     for circuit_name in tqdm(os.listdir(env_root)):
         param = float(circuit_name.replace('.pkl', '').split('_')[-1])
+        if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
         circuit_path = os.path.join(env_root, circuit_name)
         env = IBMQEnv(circ_path=circuit_path)
         num_qubits = env.circuit.num_qubits
@@ -140,6 +141,7 @@ def gen_test_identity(args, miti_prob=False):
     env_root = args.env_root
     for circuit_name in tqdm(os.listdir(env_root)):
         param = float(circuit_name.replace('.pkl', '').split('_')[-1])
+        if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
         circuit_path = os.path.join(env_root, circuit_name)
         env = IBMQEnv(circ_path=circuit_path)
         num_qubits = env.circuit.num_qubits

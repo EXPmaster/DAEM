@@ -118,14 +118,14 @@ class CircuitParser:
         return layerwise_hamiltonians
 
     def construct_train(self, circuit, train_num=1):
-        # op_string_map = {
-        #     'ZIII': 'ZZII', 'IZII': 'IZZI', 'IIZI': 'IIZZ', 'IIIZ': 'IIIZ',
-        #     'XIII': 'XIII', 'IXII': 'XXII', 'IIXI': 'XXXI', 'IIIX': 'XXXX',
-        # }
         op_string_map = {
-            'ZIIIII': 'ZZZZZZ', 'IZIIII': 'IZZZZZ', 'IIZIII': 'IIZZZZ', 'IIIZII': 'IIIZZZ', 'IIIIZI': 'IIIIZZ', 'IIIIIZ': 'IIIIIZ',
-            'XIIIII': 'XIIIII', 'IXIIII': 'XXIIII', 'IIXIII': 'IXXIII', 'IIIXII': 'IIXXII', 'IIIIXI': 'IIIXXI', 'IIIIIX': 'IIIIXX'
+            'ZIII': 'ZZII', 'IZII': 'IZZI', 'IIZI': 'IIZZ', 'IIIZ': 'IIIZ',
+            'XIII': 'XIII', 'IXII': 'XXII', 'IIXI': 'XXXI', 'IIIX': 'XXXX',
         }
+        # op_string_map = {
+        #     'ZIIIII': 'ZZZZZZ', 'IZIIII': 'IZZZZZ', 'IIZIII': 'IIZZZZ', 'IIIZII': 'IIIZZZ', 'IIIIZI': 'IIIIZZ', 'IIIIIZ': 'IIIIIZ',
+        #     'XIIIII': 'XIIIII', 'IXIIII': 'XXIIII', 'IIXIII': 'IXXIII', 'IIIXII': 'IIXXII', 'IIIIXI': 'IIIXXI', 'IIIIIX': 'IIIIXX'
+        # }
         """Construct training circuit Hamiltonians from given Hamiltonian."""
         org_operators = self.parse(circuit, return_hamiltonian=False)
         sin_sampler = sin_prob_dist(a=0, b=np.pi)
