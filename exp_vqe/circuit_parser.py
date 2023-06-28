@@ -2,7 +2,7 @@ import pickle
 from collections import OrderedDict, namedtuple
 
 import numpy as np
-from qiskit.quantum_info.operators import Pauli
+from qiskit.quantum_info import Pauli, SparsePauliOp
 from qiskit.opflow import PauliOp
 from scipy.stats import rv_continuous
 
@@ -110,10 +110,8 @@ class CircuitParser:
         layerwise_hamiltonians = []
         for layer, operator_list in operators.items():
             for operator in operator_list:
-                system_hamiltonian = sum([PauliOp(Pauli(operator.op_str[i]), coeff=operator.params[i])
-                                          for i in range(len(operator.op_str))])
-                bath_hamiltonian = sum([PauliOp(Pauli(coupling), coeff=1)
-                                        for coupling in operator.coupling])
+                system_hamiltonian = SparsePauliOp(operator.op_str, coeffs=np.array(operator.params))
+                bath_hamiltonian = SparsePauliOp(operator.coupling, coeffs=np.ones_like(operator.coupling))
                 layerwise_hamiltonians.append(self.Hamiltonian(system_hamiltonian, bath_hamiltonian))
         return layerwise_hamiltonians
 

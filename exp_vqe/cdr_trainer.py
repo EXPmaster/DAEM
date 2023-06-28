@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from qiskit import transpile
 from qiskit.providers.aer import AerSimulator
@@ -11,23 +12,25 @@ from mitiq import cdr
 from mitiq.cdr import generate_training_circuits
 from sklearn.linear_model import LinearRegression
 
+from my_envs import IBMQEnv
+
 
 class CDRTrainer:
 
     def __init__(self, env_root):
         self.envs = {}
-        for circuit_name in tqdm(os.listdir(env_root)):
+        for circuit_name in os.listdir(env_root):
             param = float(circuit_name.replace('.pkl', '').split('_')[-1])
             circuit_path = os.path.join(env_root, circuit_name)
-            self.env[param] = IBMQEnv(circ_path=circuit_path)
+            self.envs[param] = IBMQEnv(circ_path=circuit_path)
 
     def fit(self, param, observable):
-        circuit = self.env[param].circuit
+        circuit = self.envs[param].circuit
         circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
         training_circuits = generate_training_circuits(
             circuit,
             num_training_circuits=25,
-            fraction_non_clifford=0.2,
+            fraction_non_clifford=0.1,
         )
         ideal_results = []
         noisy_results = []

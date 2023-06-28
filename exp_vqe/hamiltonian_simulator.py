@@ -10,7 +10,7 @@ import scipy
 # warnings.simplefilter("ignore", UserWarning)
 import oqupy
 from qiskit import QuantumCircuit
-from qiskit.opflow import PauliSumOp
+from qiskit.opflow import PauliSumOp, PauliOp
 from qiskit.quantum_info import Pauli, SparsePauliOp
 from tqdm import tqdm
 
@@ -80,19 +80,10 @@ class NonMarkovianSimulator(HamiltonianSimulator):
         J_omega.__defaults__ = (self.cutoff, self.alpha, self.zeta)
     
     def forward_function(self, rho, hamiltonian):
-        if isinstance(hamiltonian.system, PauliSumOp):
-            pauliops = hamiltonian.system.primitive
-        else:
-            pauliops = hamiltonian.system.oplist
+        pauliops = hamiltonian.system.to_list()
 
-        for pauliop in pauliops:
-            if isinstance(pauliop, SparsePauliOp):
-                assert len(pauliop.paulis) == 1
-                pauli_string = pauliop.paulis[0]
-                parameter = 2 * pauliop.coeffs[0]
-            else:
-                pauli_string = pauliop.primitive
-                parameter = 2 * pauliop.coeff
+        for pauli_string, coeff in pauliops:
+            parameter = 2 * coeff.real
             noise_operator = [1.]
             basis_change = [1.]
             bias = [1.]
@@ -131,21 +122,12 @@ class DepolarizeSimulator(HamiltonianSimulator):
         super().__init__(noise_scale)
 
     def forward_function(self, rho, hamiltonian):
-        if isinstance(hamiltonian.system, PauliSumOp):
-            pauliops = hamiltonian.system.primitive
-        else:
-            pauliops = hamiltonian.system.oplist
+        pauliops = hamiltonian.system.to_list()
 
-        for pauliop in pauliops:
-            if isinstance(pauliop, SparsePauliOp):
-                assert len(pauliop.paulis) == 1
-                pauli_string = pauliop.paulis[0]
-            else:
-                pauli_string = pauliop.primitive
+        for pauli_string, _ in pauliops:
             noise_operator = []
             
             for p in pauli_string:
-                p = p.to_label()
                 if p == 'I':
                     noise_operator.append(['I'])
                 else:
@@ -165,21 +147,12 @@ class DephaseSimulator(HamiltonianSimulator):
         super().__init__(noise_scale, alpha=alpha)
 
     def forward_function(self, rho, hamiltonian):
-        if isinstance(hamiltonian.system, PauliSumOp):
-            pauliops = hamiltonian.system.primitive
-        else:
-            pauliops = hamiltonian.system.oplist
+        pauliops = hamiltonian.system.to_list()
 
-        for pauliop in pauliops:
-            if isinstance(pauliop, SparsePauliOp):
-                assert len(pauliop.paulis) == 1
-                pauli_string = pauliop.paulis[0]
-            else:
-                pauli_string = pauliop.primitive
+        for pauli_string, _ in pauliops:
             noise_operator = [1.]
             
             for p in pauli_string:
-                p = p.to_label()
                 if p == 'I':
                     decay_mask = np.ones((2, 2))
                 else:
@@ -203,21 +176,11 @@ class AmpdampSimulator(HamiltonianSimulator):
         }
 
     def forward_function(self, rho, hamiltonian):
-        if isinstance(hamiltonian.system, PauliSumOp):
-            pauliops = hamiltonian.system.primitive
-        else:
-            pauliops = hamiltonian.system.oplist
-
-        for pauliop in pauliops:
-            if isinstance(pauliop, SparsePauliOp):
-                assert len(pauliop.paulis) == 1
-                pauli_string = pauliop.paulis[0]
-            else:
-                pauli_string = pauliop.primitive
+        pauliops = hamiltonian.system.to_list()
+        for pauli_string, _ in pauliops:
             noise_operator = []
-            
+
             for p in pauli_string:
-                p = p.to_label()
                 if p == 'I':
                     noise_operator.append(['I'])
                 else:

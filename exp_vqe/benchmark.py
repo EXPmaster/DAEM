@@ -446,10 +446,10 @@ def evaluate_new():
     # plt.boxplot(diffs_zne)
     # plt.xscale('log')
     # ax.set_xticks([y + 1 for y in range(len(parameters))], labels=parameters)
-    plt.legend(['w/o mitigation', 'Supervise mitigation', 'CDR mitigation', 'ZNE mitigation'])
+    plt.legend(['w/o mitigation', 'Supervised mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_dep.png')
+    plt.savefig('../imgs/comp_exp_pd_new.png')
 
 
 @torch.no_grad()
@@ -611,7 +611,7 @@ def evaluate_ae():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_pd_2023-06-22-11-15/gan_model.pt', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_pd_2023-06-28-12-16/gan_model.pt', type=str)
     parser.add_argument('--testset', default='../data_mitigate/phasedamp/new_test_vqe4l.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')

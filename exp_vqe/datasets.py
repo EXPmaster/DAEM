@@ -75,7 +75,7 @@ def gen_train_val_identity(args, miti_prob=False):
     circ_parser = CircuitParser()
     for circuit_name in tqdm(os.listdir(env_root)):
         param = float(circuit_name.replace('.pkl', '').split('_')[-1])
-        if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
+        # if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
         circuit_path = os.path.join(env_root, circuit_name)
         env = IBMQEnv(circ_path=circuit_path)
         num_qubits = env.circuit.num_qubits
@@ -83,7 +83,7 @@ def gen_train_val_identity(args, miti_prob=False):
         cnot_op = cnots(2 ** num_qubits)
 
         state_array = []
-        for _ in range(400):
+        for _ in range(500):
             ideal_noisy_states = {}
             ideal_state = random_density_matrix(2 ** num_qubits)
             ideal_noisy_states[0.0] = ideal_state.evolve(cnot_op)
@@ -120,7 +120,7 @@ def gen_train_val_identity(args, miti_prob=False):
                             noisy_expectations.append(ideal_noisy_states[noise_scale].evolve(obs).probabilities([idx, idx + 1]))
                     noisy_expectations = np.array(noisy_expectations)
 
-                    if indicator < 300:
+                    if indicator < 400:
                         trainset.append([param, obs_ret, selected_qubits, noise_scale, noisy_expectations, exp_ideal])
                     else:
                         testset.append([param, obs_ret, selected_qubits, noise_scale, noisy_expectations, exp_ideal])
@@ -141,7 +141,7 @@ def gen_test_identity(args, miti_prob=False):
     env_root = args.env_root
     for circuit_name in tqdm(os.listdir(env_root)):
         param = float(circuit_name.replace('.pkl', '').split('_')[-1])
-        if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
+        # if param not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
         circuit_path = os.path.join(env_root, circuit_name)
         env = IBMQEnv(circ_path=circuit_path)
         num_qubits = env.circuit.num_qubits
