@@ -29,8 +29,9 @@ class CDRTrainer:
         circuit = transpile(circuit, basis_gates=['h', 's', 'rz', 'cx'])
         training_circuits = generate_training_circuits(
             circuit,
-            num_training_circuits=25,
-            fraction_non_clifford=0.1,
+            num_training_circuits=150,
+            fraction_non_clifford=0.0,
+            method="uniform",
         )
         ideal_results = []
         noisy_results = []

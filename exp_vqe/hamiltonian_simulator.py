@@ -44,7 +44,8 @@ class HamiltonianSimulator(ABC):
             # apply noise
             rho = self.forward_function(rho, hamiltonian)
             # ideal evolution
-            if init_rho is None or (init_rho is not None and idx < len(hamiltonians) - 3):
+            if init_rho is None or (init_rho is not None and len(hamiltonian.system) == 3):
+            # if init_rho is None or (init_rho is not None and idx < len(hamiltonians) - 3):
                 evolution_operator = scipy.linalg.expm(-1j * system)
                 rho = evolution_operator @ rho @ evolution_operator.conj().T
             idx += 1
@@ -72,7 +73,7 @@ class NonMarkovianSimulator(HamiltonianSimulator):
     """Simulate the non-Markovian dephasing noise.
     Note, the lamb shift is not considered for simplicity."""
 
-    def __init__(self, noise_scale, alpha=0.0001, zeta=6, cutoff=3):
+    def __init__(self, noise_scale, alpha=0.0005, zeta=6, cutoff=5):
         super().__init__(noise_scale, alpha=alpha, zeta=zeta, cutoff=cutoff)
         self.basis_change_matrix = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
 
@@ -89,9 +90,8 @@ class NonMarkovianSimulator(HamiltonianSimulator):
             bias = [1.]
             
             for p in pauli_string:
-                p = p.to_label()
                 if p == 'Z':
-                    decay_rate = np.exp(-2 * z_decay_fn(self.noise_scale, self.cutoff, self.alpha, self.zeta))
+                    decay_rate = np.exp(-2 * z_decay_fn(self.noise_scale * abs(parameter) / (2 * np.pi), self.cutoff, self.alpha, self.zeta))
                     decay_mask = np.array([[1., decay_rate], [decay_rate, 1.]])
                     basis_change = np.kron(basis_change, np.eye(2))
                     bias = np.kron(bias, np.zeros((2, 2)))
