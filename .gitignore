@@ -10,3 +10,5 @@ data*/
 weights/
 runs/
 environments/noise_models
+visualization
+imgs/

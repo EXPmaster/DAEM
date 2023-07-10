@@ -30,8 +30,7 @@ class CvModel(nn.Module):
         x = self.up2(x, x2)
         x = self.up3(x, x1)
         logits = self.outc(x)
-        logits = logits.flatten(1)
-        return logits / logits.sum(-1, keepdim=True)
+        return logits
 
 
 class DoubleConv(nn.Module):

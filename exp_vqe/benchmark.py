@@ -7,6 +7,7 @@ from vqe import VQETrainer
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from qiskit import Aer, QuantumCircuit, transpile, execute
 from qiskit.providers.aer import AerSimulator
@@ -608,11 +609,99 @@ def evaluate_ae():
     plt.savefig('../imgs/comp_exp_dep_ae6l.png')
 
 
+
+@torch.no_grad()
+def evaluate_cv():
+    distance = nn.CosineSimilarity()
+    eval_results = []
+    # load Supervised model
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = CvModel()
+    model_g.load_state_dict(ckpt['model_g'], strict=False)
+    model_g.to(args.device)
+    model_g.eval()
+
+    with open(args.testset, 'rb') as f:
+        testset = pickle.load(f)
+
+    # For all
+    all_results = {}
+
+    for params, exp_noisy, exp_ideal in tqdm(testset):
+        if params not in all_results:
+            all_results[params] = [[], []]
+
+        meas_ideal = torch.FloatTensor(exp_ideal)[None].flatten(1)
+        meas_noisy = torch.FloatTensor(exp_noisy[0])[None].flatten(1)
+        all_results[params][0].append(distance(meas_ideal, meas_noisy).item())
+        
+        # Supervised prediction
+        param = torch.FloatTensor([params])[None].to(args.device)
+        exp_noisy_tensor = torch.FloatTensor(exp_noisy)[None].to(args.device)
+        predicts = model_g(param, exp_noisy_tensor).flatten(1).softmax(1).cpu()
+        all_results[params][1].append(distance(meas_ideal, predicts).item())
+
+        predicts = predicts.reshape(exp_ideal.shape).numpy()
+        eval_results.append([params, exp_noisy[0], predicts, exp_ideal])
+
+    xvec = np.linspace(-4, 4, 48)
+    cmap = "RdBu_r"
+    recorded_params = []
+    for i, (param, noisy_meas, predict_meas, ideal_meas) in enumerate(eval_results):
+        if param in recorded_params: continue
+        recorded_params.append(param)
+        fig, axs = plt.subplots(2, 2)
+        fig.subplots_adjust(hspace=0.6)
+
+        im_noisy = axs[0, 0].pcolormesh(xvec, xvec, noisy_meas, cmap=cmap)
+        axs[0, 0].set_title('Noisy Measurement')
+        axs[0, 0].set_aspect(1)
+        fig.colorbar(im_noisy, ax=axs[0, 0])
+
+        im_predict = axs[0, 1].pcolormesh(xvec, xvec, predict_meas, cmap=cmap)
+        axs[0, 1].set_title('Mitigated Measurement')
+        axs[0, 1].set_aspect(1)
+        fig.colorbar(im_predict, ax=axs[0, 1])
+
+        im_ideal = axs[1, 0].pcolormesh(xvec, xvec, ideal_meas, cmap=cmap)
+        axs[1, 0].set_title('Ideal Measurement')
+        axs[1, 0].set_aspect(1)
+        fig.colorbar(im_ideal, ax=axs[1, 0])
+
+        axs[1, 1].set_visible(False) 
+
+        plt.savefig(os.path.join('visualization/test', f'state_{round(param, 3)}.png'))
+        plt.close()
+    
+
+    parameters = []
+    diffs_raw = []
+    diffs_gan = []
+    std_raw = []
+    std_gan = []
+
+    all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
+    for key, val in all_results.items():
+        parameters.append(key)
+        diffs_raw.append(np.mean(val[0]))
+        diffs_gan.append(np.mean(val[1]))
+
+    fig = plt.figure()
+    ax = plt.gca()
+    plt.plot(parameters, diffs_raw)
+    plt.plot(parameters, diffs_gan)
+
+    plt.legend(['w/o mitigation', 'Supervised mitigation'])
+    plt.xlabel('Time')
+    plt.ylabel('Cosine Similarity')
+    plt.savefig('../imgs/comp_cv.png')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_pd_2023-06-28-12-16/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/phasedamp/new_test_vqe4l.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_cv_new_photonloss_2023-07-10-23-58/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/continuous_variable/new_test_coherent.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -621,5 +710,6 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    evaluate_new()
+    # evaluate_new()
     # evaluate_ae()
+    evaluate_cv()
