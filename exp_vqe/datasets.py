@@ -47,7 +47,7 @@ class MitigateDataset(Dataset):
             torch.tensor([param_converted], dtype=int),
             torch.tensor(obs, dtype=torch.cfloat),
             torch.tensor(obs_kron, dtype=torch.cfloat),
-            torch.FloatTensor(pos),
+            torch.tensor(pos),
             torch.FloatTensor([noise_scale]),
             torch.FloatTensor(exp_noisy),
             torch.FloatTensor(exp_ideal)
@@ -269,10 +269,10 @@ def gen_continuous_train_val(args):
             for noise_scale in range(len(noisy_results)):
                 noisy_state = noisy_results[noise_scale][t_idx // 2]
                 W = qutip.wigner(noisy_state, xvec, xvec, g=2)
-                W_noisy.append(np.abs(W / W.sum()))
+                W_noisy.append(W / W.sum())
             W_noiseless = qutip.wigner(rho_train, xvec, xvec, g=2)
             W_noiseless /= W_noiseless.sum()
-            W_noiseless = np.abs(W_noiseless)
+            # W_noiseless = np.abs(W_noiseless)
             trainset.append([time, np.array(W_noisy), W_noiseless])
 
     train_path = os.path.join(args.out_root, args.out_train)
@@ -324,10 +324,11 @@ def gen_continuous_test(args):
         for noise_scale in range(len(noisy_results)):
             noisy_state = noisy_results[noise_scale][t_idx]
             W = qutip.wigner(noisy_state, xvec, xvec, g=2)
-            W_noisy.append(np.abs(W / W.sum()))
+            # W_noisy.append(np.abs(W / W.sum()))
+            W_noisy.append(W / W.sum())
         W_noiseless = qutip.wigner(noiseless_state, xvec, xvec, g=2)
         W_noiseless /= W_noiseless.sum()
-        W_noiseless = np.abs(W_noiseless)
+        # W_noiseless = np.abs(W_noiseless)
         # a = W_noisy[0].flatten()
         # b = W_noiseless.flatten()
         # print(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))

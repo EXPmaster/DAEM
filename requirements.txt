@@ -5,3 +5,4 @@ pathos
 qiskit
 mitiq
 pylatexenc
+ncon

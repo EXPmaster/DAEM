@@ -50,24 +50,27 @@ class AEModel(nn.Module):
 
 class SuperviseModel(nn.Module):
 
-    def __init__(self, num_miti, num_qubits=6, hidden_size=128, mitigate_prob=False):
+    def __init__(self, num_qubits=6, hidden_size=128, mitigate_prob=False):
         super().__init__()
         self.mitigate_prob = mitigate_prob
         self.num_qubits = num_qubits
         if self.mitigate_prob:
             out_dim = 2 ** 2
-            obs_embed_dim = num_qubits * 2 * 2 * 2
+            obs_embed_dim = num_qubits * 2 * 2 * 2 if self.num_qubits < 10 else 2 * 2 * 2 * 2
             exp_embed_dim = 12 * 2 ** 2
             # hidden_size = 256
         else:
             out_dim = 1
-            obs_embed_dim = 8 * 2 * 2
+            obs_embed_dim = num_qubits * 2 * 2 * 2 if self.num_qubits < 10 else 2 * 2 * 2 * 2
             exp_embed_dim = 12
         self.obs_embed = nn.Linear(obs_embed_dim, hidden_size)
         self.param_embed = nn.Linear(1, hidden_size)
-        # self.scale_embed = nn.Linear(1, hidden_size)
         self.exp_embed = nn.Linear(exp_embed_dim, hidden_size)
         self.embed_ln = nn.LayerNorm(hidden_size)
+
+        # for large scale data
+        if self.num_qubits >= 10:
+            self.pos_embed = nn.Embedding(50, hidden_size)
        
         self.net = nn.Sequential(
             nn.Linear(3 * hidden_size, 512),
@@ -78,7 +81,6 @@ class SuperviseModel(nn.Module):
             nn.Mish(inplace=True),
             nn.Linear(1024, 1024),
             nn.Mish(inplace=True),
-            # nn.Linear(1024, 4 ** num_miti),
             nn.Linear(1024, out_dim),
             # nn.Tanh()
         )
@@ -87,6 +89,10 @@ class SuperviseModel(nn.Module):
         obs_flat = torch.cat((obs.real, obs.imag), -1).flatten(1)
         obs_ebd = self.obs_embed(obs_flat)
         exp_ebd = self.exp_embed(noisy_exp.flatten(1))
+        # for large scale
+        if self.num_qubits > 10:
+            pos_ebd = self.pos_embed(pos[:, 0])
+            obs_ebd = obs_ebd + pos_ebd
         
         param_ebd = self.param_embed(params)
         # scale_ebd = self.scale_embed(scale)
