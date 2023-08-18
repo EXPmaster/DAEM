@@ -72,7 +72,7 @@ class IBMQEnv:
                 # # noise_model.add_all_qubit_quantum_error(error_1, ['miti', 'u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
                 # # noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
                 # self.backends[i] = AerSimulator(noise_model=noise_model)
-                self.backends[i] = DepolarizeSimulator(i)  # NonMarkovianSimulator(i)
+                self.backends[i] = DephaseSimulator(i)  # NonMarkovianSimulator(i)
 
             # self.state_table = self.build_state_table()
 
@@ -89,14 +89,17 @@ class IBMQEnv:
             num += item[0].label == 'miti'
         return num
 
-    def simulate_ideal(self, shots=1000):
-        circuit = self.circuit.copy()
-        circuit.save_statevector()
+    def simulate_ideal(self, init_state=None, shots=1000):
+        execute_circ = QuantumCircuit(self.circuit.num_qubits)
+        if init_state is not None:
+            execute_circ.initialize(init_state, range(self.circuit.num_qubits))
+        execute_circ.append(self.circuit, range(self.circuit.num_qubits))
+        execute_circ.save_statevector()
         backend = Aer.get_backend('aer_simulator')
-        results = backend.run(transpile(circuit, backend, optimization_level=0), shots=shots).result()
-        return results.get_statevector(circuit)
+        results = backend.run(transpile(execute_circ, backend, optimization_level=0), shots=shots).result()
+        return results.get_statevector(execute_circ)
 
-    def simulate_noisy(self, noise_scale, circuit=None, init_rho=None, shots=3000):
+    def simulate_noisy(self, noise_scale, circuit=None, init_rho=None, train=False, shots=3000):
         backend = self.backends[noise_scale]
         if circuit is None:
             cur_circuit = self.circuit.copy()
@@ -109,7 +112,7 @@ class IBMQEnv:
             results = backend.run(t_circuit, shots=shots).result()
             return results.data()['density_matrix']
         else:
-            final_rho = backend.run(cur_circuit, init_rho=init_rho)
+            final_rho = backend.run(cur_circuit, init_rho=init_rho, simulate_identity=train)
             return DensityMatrix(final_rho)
 
     def save(self, path):

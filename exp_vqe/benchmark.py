@@ -450,7 +450,78 @@ def evaluate_new():
     plt.legend(['w/o mitigation', 'Supervised mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_pd_new.png')
+    plt.savefig('../imgs/comp_exp_pd_alpha0001_zeta6_new.png')
+
+
+@torch.no_grad()
+def evaluate_mps():
+    eval_results = []
+    # load GAN model
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = SuperviseModel(args.num_qubits)
+    model_g.load_state_dict(ckpt['model_g'], strict=False)
+    # model_g.load_envs(args, force=True)
+    model_g.to(args.device)
+    model_g.eval()
+
+    with open(args.testset, 'rb') as f:
+        testset = pickle.load(f)
+
+    random.shuffle(testset)
+    # For all
+
+    all_results = {}
+
+    for params, obs, pos, scale, exp_noisy, exp_ideal in tqdm(testset):
+        if params not in all_results:
+            all_results[params] = [[], [], [], []]  # [raw, gan, cdr, zne]
+
+        # ZNE
+        zne_model = ZNETrainer()
+        zne_predicts = zne_model.fit_and_predict(exp_noisy)[-1]
+        # zne_model.plot_fig(exp_noisy)
+        # assert False
+        meas_ideal = exp_ideal
+        meas_noisy = exp_noisy[0]
+        all_results[params][0].append(abs(meas_ideal - meas_noisy))
+        
+        # GAN prediction
+        # obs_kron = np.kron(obs[0], obs[1])
+        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
+        param = torch.FloatTensor([params])[None].to(args.device)
+        pos = torch.tensor(pos)[None].to(args.device)
+        scale = torch.FloatTensor([0.])[None].to(args.device)
+        exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
+        predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
+        all_results[params][1].append(abs(meas_ideal - predicts))
+
+        # ZNE prediction
+        all_results[params][3].append(abs(zne_predicts - meas_ideal))
+
+    parameters = []
+    diffs_raw = []
+    diffs_gan = []
+    diffs_zne = []
+    std_raw = []
+    std_gan = []
+    std_zne = []
+
+    all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
+    for key, val in all_results.items():
+        parameters.append(key)
+        diffs_raw.append(np.mean(val[0]))
+        diffs_gan.append(np.mean(val[1]))
+        diffs_zne.append(np.mean(val[3]))
+
+    fig = plt.figure()
+    ax = plt.gca()
+    plt.plot(parameters, diffs_raw)
+    plt.plot(parameters, diffs_gan)
+    plt.plot(parameters, diffs_zne)
+    plt.legend(['w/o mitigation', 'Supervised mitigation', 'ZNE mitigation'])
+    plt.xlabel('Coeff of Ising Model')
+    plt.ylabel('Mean Absolute Error')
+    plt.savefig('../imgs/comp_exp_pd_mps.png')
 
 
 @torch.no_grad()
@@ -465,7 +536,7 @@ def evaluate_different_noise_scale():
 
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = SuperviseModel(args.num_mitigates)
+    model_g = SuperviseModel(args.num_qubits)
     # model_g = Generator(args.num_mitigates)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
     # model_g.load_envs(args, force=True)
@@ -545,7 +616,7 @@ def evaluate_ae():
     eval_results = []
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = SuperviseModel(args.num_mitigates, mitigate_prob=True)
+    model_g = SuperviseModel(args.num_qubits, mitigate_prob=True)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
     # model_g.load_envs(args, force=True)
     model_g.to(args.device)
@@ -613,6 +684,7 @@ def evaluate_ae():
 @torch.no_grad()
 def evaluate_cv():
     distance = nn.CosineSimilarity()
+    # distance = nn.KLDivLoss(reduction="batchmean", log_target=False)
     eval_results = []
     # load Supervised model
     ckpt = torch.load(args.weight_path, map_location=args.device)
@@ -633,13 +705,13 @@ def evaluate_cv():
 
         meas_ideal = torch.FloatTensor(exp_ideal)[None].flatten(1)
         meas_noisy = torch.FloatTensor(exp_noisy[0])[None].flatten(1)
-        all_results[params][0].append(distance(meas_ideal, meas_noisy).item())
+        all_results[params][0].append(distance(meas_noisy, meas_ideal).item())
         
         # Supervised prediction
         param = torch.FloatTensor([params])[None].to(args.device)
         exp_noisy_tensor = torch.FloatTensor(exp_noisy)[None].to(args.device)
-        predicts = model_g(param, exp_noisy_tensor).flatten(1).softmax(1).cpu()
-        all_results[params][1].append(distance(meas_ideal, predicts).item())
+        predicts = model_g(param, exp_noisy_tensor).flatten(1).cpu()
+        all_results[params][1].append(distance(predicts, meas_ideal).item())
 
         predicts = predicts.reshape(exp_ideal.shape).numpy()
         eval_results.append([params, exp_noisy[0], predicts, exp_ideal])
@@ -700,10 +772,10 @@ def evaluate_cv():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_cv_new_photonloss_2023-07-10-23-58/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/continuous_variable/new_test_coherent.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_mps_pd_2023-08-01-15-26/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/mps/testset_phasedamp.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
-    parser.add_argument('--num-mitigates', default=4, type=int, help='number of mitigation gates')
+    parser.add_argument('--num-qubits', default=50, type=int, help='number of qubits')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
     parser.add_argument('--gpus', default='0', type=str)
     args = parser.parse_args()
@@ -712,4 +784,5 @@ if __name__ == '__main__':
 
     # evaluate_new()
     # evaluate_ae()
-    evaluate_cv()
+    # evaluate_cv()
+    evaluate_mps()

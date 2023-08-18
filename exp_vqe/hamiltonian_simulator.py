@@ -24,7 +24,7 @@ class HamiltonianSimulator(ABC):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def run(self, inputs, init_rho=None, verbose=False):
+    def run(self, inputs, init_rho=None, simulate_identity=False, verbose=False):
         assert self.noise_scale > 0, 'Noise scale must be positive.'
         if isinstance(inputs, QuantumCircuit):
             hamiltonians = CircuitParser().parse(inputs)
@@ -44,7 +44,7 @@ class HamiltonianSimulator(ABC):
             # apply noise
             rho = self.forward_function(rho, hamiltonian)
             # ideal evolution
-            if init_rho is None or (init_rho is not None and len(hamiltonian.system) == 3):
+            if not simulate_identity or (simulate_identity and len(hamiltonian.system) == 3):
             # if init_rho is None or (init_rho is not None and idx < len(hamiltonians) - 3):
                 evolution_operator = scipy.linalg.expm(-1j * system)
                 rho = evolution_operator @ rho @ evolution_operator.conj().T
