@@ -1,14 +1,10 @@
 import pickle
 import os
 import random
-import pathos
 import functools
 import numpy as np
 from tqdm import tqdm
 
-import cirq
-import cirq.ops as ops
-from cirq.circuits import InsertStrategy
 import torch
 
 from qiskit import IBMQ, Aer, QuantumCircuit, QuantumRegister, ClassicalRegister, transpile, execute
@@ -19,9 +15,7 @@ import qiskit.providers.aer.noise as noise
 from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info.operators import Pauli
 
-from ibmq_circuit_transformer import TransformCircWithPr, TransformCircWithIndex, add_miti_gates_to_circuit
 from utils import AverageMeter, ConfigDict, gen_rand_pauli
-from circuit_lib import *
 from hamiltonian_simulator import NonMarkovianSimulator, DepolarizeSimulator, DephaseSimulator, AmpdampSimulator
 from circuit_parser import CircuitParser
 

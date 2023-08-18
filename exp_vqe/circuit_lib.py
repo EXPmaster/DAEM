@@ -3,7 +3,6 @@ __all__ = ['DQCp', 'swaptest', 'random_circuit']
 
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from PIL import Image
 from qiskit.circuit import Reset
 from qiskit.circuit.library.standard_gates import (
     IGate,

@@ -35,7 +35,7 @@ if __name__ == '__main__':
     if not os.path.exists(args.out_path):
         os.makedirs(args.out_path)
 
-    circuit = swaptest(args.num_qubits)
+    circuit = trotter_step(args.num_qubits)
     circuit = transpile(circuit, basis_gates=['cx', 'u'])
     
     print(circuit)

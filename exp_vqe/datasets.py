@@ -8,7 +8,6 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 import numpy as np
-import pathos
 from tqdm import tqdm
 
 from qiskit import QuantumCircuit
@@ -21,7 +20,6 @@ from qiskit.circuit.library.standard_gates import SdgGate, HGate
 
 from utils import gen_rand_pauli, gen_rand_obs, partial_trace
 from my_envs import IBMQEnv
-from autoencoder import StateGenerator
 from circuit_parser import CircuitParser
 
 
@@ -173,17 +171,17 @@ def gen_train_val_identity2(args, miti_prob=False):
         op_str = 'I' * num_qubits
         cnot_op = cnots(env.circuit)
 
-        state_array = []
-        for _ in tqdm(range(200)):
+        # state_array = []
+        for indicator in tqdm(range(200)):
             ideal_noisy_states = {}
             ideal_state = random_density_matrix(2 ** num_qubits)
             ideal_noisy_states[0.0] = ideal_state.evolve(cnot_op)
             for noise_scale in np.round(np.arange(0.05, 0.29, 0.02), 3):
                 noisy_state = env.simulate_noisy(noise_scale, init_rho=ideal_state.data, train=True)
                 ideal_noisy_states[noise_scale] = noisy_state
-            state_array.append(ideal_noisy_states)
+            # state_array.append(ideal_noisy_states)
 
-        for indicator, ideal_noisy_states in enumerate(state_array):
+        # for indicator, ideal_noisy_states in enumerate(state_array):
             for idx in range(num_qubits - 1): # 5
                 for obs1, obs2 in itertools.product(paulis, paulis): # 16
                     rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
@@ -241,7 +239,7 @@ def gen_train_val_swaptest(args):
         cnot_op = cnots(env.circuit)
 
         state_array = []
-        for _ in tqdm(range(200)):
+        for _ in tqdm(range(100)):
             ideal_noisy_states = {}
             ideal_state = random_density_matrix(2 ** num_qubits)
             ideal_noisy_states[0.0] = ideal_state.evolve(cnot_op)
@@ -268,7 +266,7 @@ def gen_train_val_swaptest(args):
                 noisy_expectations.append(ideal_noisy_states[noise_scale].probabilities([idx]))
             noisy_expectations = np.array(noisy_expectations)
 
-            if indicator < 150:
+            if indicator < 70:
                 trainset.append([param, obs_ret, selected_qubits, noise_scale, noisy_expectations, exp_ideal])
             else:
                 testset.append([param, obs_ret, selected_qubits, noise_scale, noisy_expectations, exp_ideal])

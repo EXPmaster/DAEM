@@ -6,9 +6,9 @@ import functools
 import itertools
 import numpy as np
 import scipy
+import torch
 # import warnings
 # warnings.simplefilter("ignore", UserWarning)
-import oqupy
 from qiskit import QuantumCircuit
 from qiskit.opflow import PauliSumOp, PauliOp
 from qiskit.quantum_info import Pauli, SparsePauliOp
@@ -37,7 +37,7 @@ class HamiltonianSimulator(ABC):
             initial_state[0] = 1.0
             rho = np.outer(initial_state, initial_state.conj())
         else:
-            rho = init_rho
+            rho = torch.from_numpy(init_rho).cuda()
         idx = 0
         for hamiltonian in tqdm(hamiltonians, disable=not verbose, file=sys.__stdout__):
             system = hamiltonian.system.to_matrix()
@@ -46,10 +46,10 @@ class HamiltonianSimulator(ABC):
             # ideal evolution
             if not simulate_identity or (simulate_identity and len(hamiltonian.system) == 3):
             # if init_rho is None or (init_rho is not None and idx < len(hamiltonians) - 3):
-                evolution_operator = scipy.linalg.expm(-1j * system)
+                evolution_operator = torch.matrix_exp(torch.from_numpy(-1j * system).cuda())
                 rho = evolution_operator @ rho @ evolution_operator.conj().T
             idx += 1
-        return rho
+        return rho.cpu().numpy()
 
     def init_function(self):
         """ Initialization run before simulation."""
@@ -150,16 +150,16 @@ class DephaseSimulator(HamiltonianSimulator):
         pauliops = hamiltonian.system.to_list()
 
         for pauli_string, _ in pauliops:
-            noise_operator = [1.]
+            noise_operator = torch.tensor([1.]).cuda()
             
             for p in pauli_string:
                 if p == 'I':
-                    decay_mask = np.ones((2, 2))
+                    decay_mask = torch.ones((2, 2)).cuda()
                 else:
                     decay_rate = np.exp(-2 * self.alpha * self.noise_scale)
-                    decay_mask = np.array([[1.0, decay_rate],
-                                            [decay_rate, 1.0]])
-                noise_operator = np.kron(noise_operator, decay_mask)
+                    decay_mask = torch.tensor([[1.0, decay_rate],
+                                            [decay_rate, 1.0]]).cuda()
+                noise_operator = torch.kron(noise_operator, decay_mask)
 
             rho = noise_operator * rho
         return rho
