@@ -23,7 +23,8 @@ def main(args):
     print(len(trainset))
     if args.miti_prob:
         # loss_fn = nn.CrossEntropyLoss()
-        loss_fn = nn.KLDivLoss(reduction="batchmean", log_target=False)
+        # loss_fn = nn.KLDivLoss(reduction="batchmean", log_target=False)
+        loss_fn = nn.L1Loss()
     else:
         loss_fn = nn.MSELoss()
     model = CvModel()
@@ -67,7 +68,7 @@ def train(epoch, args, loader, model, loss_fn, optimizer):
         exp_noisy = exp_noisy.to(args.device)
         optimizer.zero_grad()
         fake = model(params, exp_noisy).flatten(1)
-        fake = F.log_softmax(fake, dim=1)
+        # fake = F.log_softmax(fake, dim=1)
         loss_real = loss_fn(fake, gts.flatten(1))
         loss_real.backward()
         optimizer.step()
@@ -91,7 +92,7 @@ def validate(epoch, args, loader, model, loss_fn):
         exp_noisy = exp_noisy.to(args.device)
         preds = model(params, exp_noisy)
         if args.miti_prob:
-            diff = distance(preds.flatten(1).softmax(1), gts.flatten(1)).mean().item()
+            diff = distance(preds.flatten(1), gts.flatten(1)).mean().item()
             unmitigated_metric.update(distance(exp_noisy[:, 0].flatten(1), gts.flatten(1)).mean().item())
         else:
             diff = abs_deviation(preds, gts)

@@ -62,7 +62,7 @@ class SuperviseModel(nn.Module):
         else:
             out_dim = 1
             obs_embed_dim = num_qubits * 2 * 2 * 2 if self.num_qubits < 10 else 2 * 2 * 2 * 2
-            exp_embed_dim = 12
+            exp_embed_dim = 4  # 12
         self.obs_embed = nn.Linear(obs_embed_dim, hidden_size)
         self.param_embed = nn.Linear(1, hidden_size)
         self.exp_embed = nn.Linear(exp_embed_dim, hidden_size)

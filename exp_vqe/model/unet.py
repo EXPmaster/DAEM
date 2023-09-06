@@ -30,7 +30,8 @@ class CvModel(nn.Module):
         x = self.up2(x, x2)
         x = self.up3(x, x1)
         logits = self.outc(x)
-        return logits
+        logits = torch.tanh(logits)
+        return logits # / logits.detach().sum((1, 2, 3), keepdim=True)
 
 
 class DoubleConv(nn.Module):

@@ -25,7 +25,8 @@ class ZNETrainer:
 
     def fit_and_predict(self, exps):
         # folded_circuit = fold_gates_at_random(circuit, 0.5)
-        noise_levels = np.round(np.arange(0.05, 0.29, 0.02), 3)
+        # noise_levels = np.round(np.arange(0.05, 0.29, 0.02), 3)
+        noise_levels = np.linspace(0.005, 0.1, 4)
         noisy_results = exps
         # for n in noise_levels:
         #     noisy_results.append(self.simulate_noisy(observable, n))

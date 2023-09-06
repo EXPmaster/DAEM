@@ -46,7 +46,7 @@ class MitigateDataset(Dataset):
             torch.tensor(obs, dtype=torch.cfloat),
             torch.tensor(obs_kron, dtype=torch.cfloat),
             torch.tensor(pos),
-            torch.FloatTensor([noise_scale]),
+            torch.FloatTensor(noise_scale),
             torch.FloatTensor(exp_noisy),
             torch.FloatTensor(exp_ideal)
         )
@@ -422,18 +422,15 @@ def gen_test_identity(args, miti_prob=False):
         #     noisy_state = env.simulate_noisy(noise_scale)
         #     ideal_noisy_states[noise_scale] = noisy_state
         
-        state_array = []
         for _ in range(20):
             ideal_noisy_states = {}
             ideal_state = random_statevector(2 ** (num_qubits - 1))
-            ideal_state = zero_state.tensor(ideal_state).to_operator()
+            ideal_state = zero_state.tensor(ideal_state)# .to_operator()
             ideal_noisy_states[0.0] = env.simulate_ideal(ideal_state.data)
             for noise_scale in np.round(np.arange(0.05, 0.29, 0.02), 3):
                 noisy_state = env.simulate_noisy(noise_scale, init_rho=ideal_state.data, train=True)
                 ideal_noisy_states[noise_scale] = noisy_state
-            state_array.append(ideal_noisy_states)
-
-        for indicator, ideal_noisy_states in enumerate(state_array):
+            
             for idx in range(num_qubits - 1): # 5
                 for obs1, obs2 in itertools.product(paulis, paulis): # 16
                     rand_obs_string = op_str[:idx] + obs1 + obs2 + op_str[idx + 2:]
@@ -529,7 +526,7 @@ if __name__ == '__main__':
     # gen_train_val_swaptest(args)
     # gen_test_swaptest(args)
 
-    gen_train_val_identity2(args, args.mitigate_prob)
+    # gen_train_val_identity2(args, args.mitigate_prob)
     gen_test_identity(args, args.mitigate_prob)
     # gen_continuous_train_val(args)
     # gen_continuous_test(args)

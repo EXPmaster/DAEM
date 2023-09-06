@@ -5,7 +5,10 @@ import functools
 import os
 from vqe import VQETrainer
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -22,7 +25,7 @@ from torchquantum import switch_little_big_endian_state
 from model import *
 from utils import AverageMeter, abs_deviation, gen_rand_obs
 from my_envs import IBMQEnv
-from datasets import MitigateDataset, StateGenerator
+from datasets import MitigateDataset
 from cdr_trainer import CDRTrainer
 from lbem_trainer import LBEMTrainer2
 from zne_trainer import ZNETrainer
@@ -359,7 +362,7 @@ def evaluate_new():
     eval_results = []
     # load GAN model
     ckpt = torch.load(args.weight_path, map_location=args.device)
-    model_g = SuperviseModel(args.num_mitigates)
+    model_g = SuperviseModel(args.num_qubits)
     model_g.load_state_dict(ckpt['model_g'], strict=False)
     # model_g.load_envs(args, force=True)
     model_g.to(args.device)
@@ -450,8 +453,74 @@ def evaluate_new():
     plt.legend(['w/o mitigation', 'Supervised mitigation', 'CDR mitigation', 'ZNE mitigation'])
     plt.xlabel('Coeff of Ising Model')
     plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_pd_alpha0001_zeta6_new.png')
+    plt.savefig('../imgs/comp_exp_pd_st11q_new.png')
 
+
+@torch.no_grad()
+def evaluate_swaptest():
+    eval_results = []
+    # load GAN model
+    ckpt = torch.load(args.weight_path, map_location=args.device)
+    model_g = SuperviseModel(args.num_qubits)
+    model_g.load_state_dict(ckpt['model_g'], strict=False)
+    # model_g.load_envs(args, force=True)
+    model_g.to(args.device)
+    model_g.eval()
+
+    # cdr_model = CDRTrainer(args.env_path)
+
+    with open(args.testset, 'rb') as f:
+        testset = pickle.load(f)
+
+    random.shuffle(testset)
+    # For all
+
+    all_results = pd.DataFrame(columns=['Input state', 'QEM strategy', 'MAE'])
+
+    for idx, (params, obs, pos, scale, exp_noisy, exp_ideal) in tqdm(enumerate(testset)):
+
+        # # CDR
+        # cdr_model = CDRTrainer(envs[0.4].backends[0.05])
+        # cdr_model.fit(params, functools.reduce(np.kron, obs[::-1]))
+
+        # ZNE
+        zne_model = ZNETrainer()
+        zne_predicts = zne_model.fit_and_predict(exp_noisy)[-1]
+        # zne_model.plot_fig(exp_noisy)
+        # assert False
+        meas_ideal = exp_ideal
+        meas_noisy = exp_noisy[0]
+        all_results = all_results.append(
+            {'Input state': idx, 'QEM strategy': 'w/o', 'MAE': abs(meas_ideal - meas_noisy)},
+            ignore_index=True
+        )
+        
+        # GAN prediction
+        # obs_kron = np.kron(obs[0], obs[1])
+        obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
+        param = torch.FloatTensor([params])[None].to(args.device)
+        pos = torch.tensor(pos)[None].to(args.device)
+        scale = torch.FloatTensor([0.])[None].to(args.device)
+        exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
+        predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
+        all_results = all_results.append(
+            {'Input state': idx, 'QEM strategy': 'Supervised', 'MAE': abs(meas_ideal - predicts)},
+            ignore_index=True
+        )
+        # print(predicts, meas_ideal)
+        # # CDR prediction
+        # cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
+        # all_results[params][2].append(abs(cdr_predicts - meas_ideal))
+
+        # ZNE prediction
+        all_results = all_results.append(
+            {'Input state': idx, 'QEM strategy': 'ZNE', 'MAE': abs(zne_predicts - meas_ideal)},
+            ignore_index=True
+        )
+    sns.lineplot(data=all_results, x='Input state', y='MAE', hue='QEM strategy',
+                style='QEM strategy', markers=True, dashes=False, sort=True)
+
+    plt.savefig('../imgs/comp_exp_pd_st11q_new.png')
 
 @torch.no_grad()
 def evaluate_mps():
@@ -772,8 +841,8 @@ def evaluate_cv():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_mps_pd_2023-08-01-15-26/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/mps/testset_phasedamp.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_st11q_pd_2023-09-06-10-36/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/data_st11q_pd_bak/testset.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-qubits', default=50, type=int, help='number of qubits')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -785,4 +854,5 @@ if __name__ == '__main__':
     # evaluate_new()
     # evaluate_ae()
     # evaluate_cv()
-    evaluate_mps()
+    # evaluate_mps()
+    evaluate_swaptest()
