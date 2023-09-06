@@ -373,14 +373,12 @@ def evaluate_new():
     with open(args.testset, 'rb') as f:
         testset = pickle.load(f)
 
-    random.shuffle(testset)
+    # random.shuffle(testset)
     # For all
 
-    all_results = {}
+    all_results = pd.DataFrame(columns=['Ising coefficient', 'QEM strategy', 'MAE'])
 
     for params, obs, pos, scale, exp_noisy, exp_ideal in tqdm(testset):
-        if params not in all_results:
-            all_results[params] = [[], [], [], []]  # [raw, gan, cdr, zne]
 
         # # CDR
         # cdr_model = CDRTrainer(envs[0.4].backends[0.05])
@@ -393,9 +391,12 @@ def evaluate_new():
         # assert False
         meas_ideal = exp_ideal
         meas_noisy = exp_noisy[0]
-        all_results[params][0].append(abs(meas_ideal - meas_noisy))
+        all_results = all_results.append(
+            {'Ising coefficient': params, 'QEM strategy': 'w/o', 'MAE': abs(meas_ideal - meas_noisy)},
+            ignore_index=True
+        )
         
-        # GAN prediction
+        # NN prediction
         # obs_kron = np.kron(obs[0], obs[1])
         obs = torch.tensor(obs, dtype=torch.cfloat)[None].to(args.device)
         param = torch.FloatTensor([params])[None].to(args.device)
@@ -403,57 +404,28 @@ def evaluate_new():
         scale = torch.FloatTensor([0.])[None].to(args.device)
         exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
         predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
-        all_results[params][1].append(abs(meas_ideal - predicts))
+        all_results = all_results.append(
+            {'Ising coefficient': params, 'QEM strategy': 'Supervised', 'MAE': abs(meas_ideal - predicts)},
+            ignore_index=True
+        )
         
         # CDR prediction
         cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
-        all_results[params][2].append(abs(cdr_predicts - meas_ideal))
+        all_results = all_results.append(
+            {'Ising coefficient': params, 'QEM strategy': 'CDR', 'MAE': abs(cdr_predicts - meas_ideal)},
+            ignore_index=True
+        )
 
         # ZNE prediction
-        all_results[params][3].append(abs(zne_predicts - meas_ideal))
+        all_results = all_results.append(
+            {'Ising coefficient': params, 'QEM strategy': 'ZNE', 'MAE': abs(zne_predicts - meas_ideal)},
+            ignore_index=True
+        )
 
-    parameters = []
-    diffs_raw = []
-    diffs_gan = []
-    diffs_cdr = []
-    diffs_zne = []
-    std_raw = []
-    std_gan = []
-    std_zne = []
+    sns.lineplot(data=all_results, x='Ising coefficient', y='MAE', hue='QEM strategy',
+                style='QEM strategy', markers=True, dashes=False, sort=True)
 
-    all_results = dict(sorted(all_results.items(), key=lambda x: x[0]))
-    for key, val in all_results.items():
-        # if key not in [0.6, 0.7, 1.0, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]: continue
-        parameters.append(key)
-        diffs_raw.append(np.mean(val[0]))
-        diffs_gan.append(np.mean(val[1]))
-        diffs_cdr.append(np.mean(val[2]))
-        diffs_zne.append(np.mean(val[3]))
-        # diffs_raw.append(val[0])
-        # diffs_gan.append(val[1])
-        # diffs_zne.append(val[3])
-        # std_raw.append(np.var(val[0]))
-        # std_gan.append(np.var(val[1]))
-        # std_zne.append(np.var(val[3]))
-
-    fig = plt.figure()
-    ax = plt.gca()
-    plt.plot(parameters, diffs_raw)
-    plt.plot(parameters, diffs_gan)
-    plt.plot(parameters, diffs_cdr)
-    plt.plot(parameters, diffs_zne)
-    # plt.errorbar(parameters, diffs_raw, yerr=std_raw, fmt='-o')
-    # plt.errorbar(parameters, diffs_gan, yerr=std_gan, fmt='-o')
-    # plt.errorbar(parameters, diffs_zne, yerr=std_zne, fmt='-o')
-    # plt.boxplot(diffs_raw)
-    # plt.boxplot(diffs_gan)
-    # plt.boxplot(diffs_zne)
-    # plt.xscale('log')
-    # ax.set_xticks([y + 1 for y in range(len(parameters))], labels=parameters)
-    plt.legend(['w/o mitigation', 'Supervised mitigation', 'CDR mitigation', 'ZNE mitigation'])
-    plt.xlabel('Coeff of Ising Model')
-    plt.ylabel('Mean Absolute Error')
-    plt.savefig('../imgs/comp_exp_pd_st11q_new.png')
+    plt.savefig('../figures/vqe_4qubits_markov_phasedamp.pdf')
 
 
 @torch.no_grad()
@@ -467,7 +439,7 @@ def evaluate_swaptest():
     model_g.to(args.device)
     model_g.eval()
 
-    # cdr_model = CDRTrainer(args.env_path)
+    cdr_model = CDRTrainer(None, '../runs/cdr_st11q.pkl')
 
     with open(args.testset, 'rb') as f:
         testset = pickle.load(f)
@@ -478,11 +450,6 @@ def evaluate_swaptest():
     all_results = pd.DataFrame(columns=['Input state', 'QEM strategy', 'MAE'])
 
     for idx, (params, obs, pos, scale, exp_noisy, exp_ideal) in tqdm(enumerate(testset)):
-
-        # # CDR
-        # cdr_model = CDRTrainer(envs[0.4].backends[0.05])
-        # cdr_model.fit(params, functools.reduce(np.kron, obs[::-1]))
-
         # ZNE
         zne_model = ZNETrainer()
         zne_predicts = zne_model.fit_and_predict(exp_noisy)[-1]
@@ -507,10 +474,13 @@ def evaluate_swaptest():
             {'Input state': idx, 'QEM strategy': 'Supervised', 'MAE': abs(meas_ideal - predicts)},
             ignore_index=True
         )
-        # print(predicts, meas_ideal)
-        # # CDR prediction
-        # cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
-        # all_results[params][2].append(abs(cdr_predicts - meas_ideal))
+
+        # CDR prediction
+        cdr_predicts = cdr_model.predict(np.array(meas_noisy).reshape(-1, 1))
+        all_results = all_results.append(
+            {'Input state': idx, 'QEM strategy': 'CDR', 'MAE': abs(cdr_predicts - meas_ideal)},
+            ignore_index=True
+        )
 
         # ZNE prediction
         all_results = all_results.append(
@@ -520,7 +490,7 @@ def evaluate_swaptest():
     sns.lineplot(data=all_results, x='Input state', y='MAE', hue='QEM strategy',
                 style='QEM strategy', markers=True, dashes=False, sort=True)
 
-    plt.savefig('../imgs/comp_exp_pd_st11q_new.png')
+    plt.savefig('../figures/swaptest_11qubits_phasedamp.pdf')
 
 @torch.no_grad()
 def evaluate_mps():
@@ -841,7 +811,7 @@ def evaluate_cv():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_st11q_pd_2023-09-06-10-36/gan_model.pt', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_markov_pd_2023-06-28-12-16/gan_model.pt', type=str)
     parser.add_argument('--testset', default='../data_mitigate/data_st11q_pd_bak/testset.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-qubits', default=50, type=int, help='number of qubits')
@@ -851,8 +821,8 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    # evaluate_new()
+    evaluate_new()
     # evaluate_ae()
     # evaluate_cv()
     # evaluate_mps()
-    evaluate_swaptest()
+    # evaluate_swaptest()
