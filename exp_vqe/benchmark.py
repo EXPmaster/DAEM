@@ -471,7 +471,7 @@ def evaluate_swaptest():
         exp_noisy = torch.FloatTensor(exp_noisy)[None].to(args.device)
         predicts = model_g(param, obs, pos, scale, exp_noisy).squeeze().item()
         all_results = all_results.append(
-            {'Input state': idx, 'QEM strategy': 'Supervised', 'MAE': abs(meas_ideal - predicts)},
+            {'Input state': idx, 'QEM strategy': 'EM-NET', 'MAE': abs(meas_ideal - predicts)},
             ignore_index=True
         )
 
@@ -487,10 +487,44 @@ def evaluate_swaptest():
             {'Input state': idx, 'QEM strategy': 'ZNE', 'MAE': abs(zne_predicts - meas_ideal)},
             ignore_index=True
         )
-    sns.lineplot(data=all_results, x='Input state', y='MAE', hue='QEM strategy',
-                style='QEM strategy', markers=True, dashes=False, sort=True)
+    # sns.lineplot(data=all_results, x='Input state', y='MAE', hue='QEM strategy',
+    #             style='QEM strategy', markers=True, dashes=False, sort=True)
+    # sns.stripplot(data=all_results, x="MAE", y="QEM strategy", hue="QEM strategy", size=2)
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [2, 3]})
+
+    sns.boxplot(data=all_results, x="QEM strategy", y="MAE", hue="QEM strategy", dodge=False, width=0.3, ax=ax1)
+    sns.boxplot(data=all_results, x="QEM strategy", y="MAE", hue="QEM strategy", dodge=False, width=0.3, ax=ax2)
+    ax1.set_ylim(0.1, 0.14)
+    ax2.set_ylim(0, 0.04)
+    # hide the spines between ax and ax2
+    ax1.spines['bottom'].set_visible(False)
+    ax2.spines['top'].set_visible(False)
+    ax1.get_xaxis().set_visible(False)
+    ax1.xaxis.tick_top()
+    ax1.tick_params(labeltop=False)  # don't put tick labels at the top
+    ax2.xaxis.tick_bottom()
+    ax1.set_ylabel("")
+    ax2.set_ylabel("")
+    # by default, seaborn also gives each subplot its own legend, which makes no sense at all
+    # soe remove both default legends first
+    ax1.get_legend().remove()
+    ax2.get_legend().remove()
+    # then create a new legend and put it to the side of the figure (also requires trial and error)
+    ax1.legend(loc=(0.75, 0.1), title="QEM strategy")
+    # set a new label on the plot (basically just a piece of text) and move it to where it makes sense
+    f.text(0.03, 0.55, "MAE", va="center", rotation="vertical")
+    d = .015  # how big to make the diagonal lines in axes coordinates
+    # arguments to pass to plot, just so we don't keep repeating them
+    kwargs = dict(transform=ax1.transAxes, color='k', clip_on=False)
+    ax1.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
+    ax1.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
+
+    kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
+    ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
+    ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
 
     plt.savefig('../figures/swaptest_11qubits_phasedamp.pdf')
+
 
 @torch.no_grad()
 def evaluate_mps():
@@ -811,8 +845,8 @@ def evaluate_cv():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-path', default='../environments/circuits/vqe_4l', type=str)
-    parser.add_argument('--weight-path', default='../runs/env_vqe4l_new_markov_pd_2023-06-28-12-16/gan_model.pt', type=str)
-    parser.add_argument('--testset', default='../data_mitigate/data_st11q_pd_bak/testset.pkl', type=str)
+    parser.add_argument('--weight-path', default='../runs/env_st11q_pd_2023-09-06-16-12/gan_model.pt', type=str)
+    parser.add_argument('--testset', default='../data_mitigate/data_st11q_pd/testset.pkl', type=str)
     parser.add_argument('--test-num', default=1, type=int, help='number of data to test')
     parser.add_argument('--num-qubits', default=50, type=int, help='number of qubits')
     parser.add_argument('--num-obs', default=2, type=int, help='number of observables')
@@ -821,8 +855,8 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
     args.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    evaluate_new()
+    # evaluate_new()
     # evaluate_ae()
     # evaluate_cv()
     # evaluate_mps()
-    # evaluate_swaptest()
+    evaluate_swaptest()
