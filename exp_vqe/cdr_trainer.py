@@ -1,9 +1,8 @@
 import os
 import numpy as np
+import pickle
+
 from qiskit import transpile
-from qiskit.providers.aer import AerSimulator
-from qiskit.providers.aer.noise import NoiseModel
-import qiskit.providers.aer.noise as noise
 from qiskit.quantum_info.operators import Operator, Pauli
 from qiskit.quantum_info import Statevector
 from qiskit.opflow import PauliOp
@@ -17,12 +16,16 @@ from my_envs import IBMQEnv
 
 class CDRTrainer:
 
-    def __init__(self, env_root):
+    def __init__(self, env_root, pretrain_path=None):
         self.envs = {}
-        for circuit_name in os.listdir(env_root):
-            param = float(circuit_name.replace('.pkl', '').split('_')[-1])
-            circuit_path = os.path.join(env_root, circuit_name)
-            self.envs[param] = IBMQEnv(circ_path=circuit_path)
+        if pretrain_path is None:
+            for circuit_name in os.listdir(env_root):
+                param = float(circuit_name.replace('.pkl', '').split('_')[-1])
+                circuit_path = os.path.join(env_root, circuit_name)
+                self.envs[param] = IBMQEnv(circ_path=circuit_path)
+        else:
+            with open(pretrain_path, 'rb') as f:
+                self.reg = pickle.load(f)
 
     def fit(self, param, observable):
         circuit = self.envs[param].circuit
@@ -60,19 +63,50 @@ class CDRTrainer:
 
 
 if __name__ == '__main__':
-    from circuit_lib import random_circuit
-    circuit = random_circuit(6, 2, 2)
+    import torch
+    from TensornetSimulator import MPOCircuitSimulator, swaptest
+    from cuquantum import cutensornet as cutn
+    from tqdm import tqdm
 
-    noise_model = NoiseModel()
-    error_1 = noise.depolarizing_error(0.01, 1)  # single qubit gates
-    error_2 = noise.depolarizing_error(0.01, 2)
-    noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'rx', 'ry', 'rz', 'i', 'x', 'y', 'z', 'h', 's', 't', 'sdg', 'tdg'])
-    noise_model.add_all_qubit_quantum_error(error_2, ['cx', 'cy', 'cz', 'ch', 'crz', 'swap', 'cu1', 'cu3', 'rzz'])
+    training_circuits = generate_training_circuits(
+        swaptest(5),
+        num_training_circuits=100,
+        fraction_non_clifford=0.0,
+        method="uniform",
+    )
+    handle = cutn.create()
+    device = 'cuda'
+    options = {'handle': handle}
+    dtype = torch.complex64
 
-    obs = PauliOp(Pauli('ZZIIII'))
-    cdr_t = CDRTrainer(circuit, obs, noise_model)
-    cdr_t.fit()
-    noisy_data = cdr_t.simulate_noisy(cdr_t.circuit)
-    noisy_data = np.array(noisy_data).reshape(-1, 1)
-    print(noisy_data.shape)
-    print(cdr_t.predict(noisy_data))
+    pauli_z = torch.tensor([[1., 0.], [0., -1.]], dtype=dtype, device=device)
+
+    with open('../data_mitigate/data_st11q_pd/states.pkl', 'rb') as f:
+        input_states = pickle.load(f)[:100]
+
+    noise_level = 1 - np.exp(-2 * 0.05)
+    ref_state = torch.tensor([[1., 0.], [0., 0.]], dtype=dtype, device=device)
+    ideal_results = []
+    noisy_results = []
+    for circuit, states in tqdm(zip(training_circuits, input_states)):
+        state1, state2 = states
+        state1_t = torch.from_numpy(state1).to(dtype=dtype, device=device)
+        state2_t = torch.from_numpy(state2).to(dtype=dtype, device=device)
+        state1_t = torch.outer(state1_t, state1_t.conj())
+        state2_t = torch.outer(state2_t, state2_t.conj())
+        init_rho = torch.kron(ref_state, torch.kron(state1_t, state2_t))
+        backend = MPOCircuitSimulator(
+                    circuit,
+                    'dephasing',
+                    dtype=dtype,
+                    device=device,
+                    options=options
+                )
+        ideal_results.append(round(backend.run([pauli_z], (0,), init_rho=init_rho).real, 6))
+        noisy_results.append(round(backend.run([pauli_z], (0,), noise_level=noise_level, init_rho=init_rho).real, 6))
+    ideal_results = np.array(ideal_results).reshape(-1, 1)
+    noisy_results = np.array(noisy_results).reshape(-1, 1)
+    reg = LinearRegression()
+    reg.fit(noisy_results, ideal_results)
+    with open('cdr_st11q.pkl', 'wb') as f:
+        pickle.dump(reg, f)

@@ -114,10 +114,6 @@ def generate_data_parallel(states, circuit, backend, save_root, file_name, train
         pickle.dump(dataset, f)
 
 
-def generate_clifford_data():
-    ...
-
-
 if __name__ == '__main__':
     SAVE_ROOT = 'data_st11q_pd'
     if not os.path.exists(SAVE_ROOT):

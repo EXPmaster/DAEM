@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from cuquantum import cutensornet as cutn
 
-from mpo_utils import (dm2mpo, mpo2dm, trace, clone, unfold_circuit,
+from .mpo_utils import (dm2mpo, mpo2dm, trace, clone, unfold_circuit,
                         apply_gate, measure_expectation, apply_noise)
 
 

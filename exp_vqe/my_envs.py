@@ -8,10 +8,10 @@ from tqdm import tqdm
 import torch
 
 from qiskit import IBMQ, Aer, QuantumCircuit, QuantumRegister, ClassicalRegister, transpile, execute
-from qiskit.providers.aer import AerSimulator
+# from qiskit.providers.aer import AerSimulator
 import qiskit.opflow as opflow
-from qiskit.providers.aer.noise import NoiseModel
-import qiskit.providers.aer.noise as noise
+# from qiskit.providers.aer.noise import NoiseModel
+# import qiskit.providers.aer.noise as noise
 from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info.operators import Pauli
 
