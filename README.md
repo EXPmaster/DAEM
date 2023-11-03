@@ -2,8 +2,8 @@
 
 
 
-> [** Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered
-> Neural Model **]()
+> [**Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered
+> Neural Model**]()
 >
 > by Manwen Liao<sup>1</sup> \*, [Yan Zhu](https://scholar.google.com/citations?user=sC4bSoEAAAAJ&hl=en)<sup>1</sup> \*, [Giulio Chiribella](https://scholar.google.com/citations?user=4ob0VU4AAAAJ&hl=en)<sup>1, 2, 3</sup>, [Yuxiang Yang](https://scholar.google.com/citations?user=jpFFDKcAAAAJ&hl=en)<sup>1 :email:</sup>
 >
@@ -41,13 +41,13 @@ a. The variational ansatz for preparing the ground states of 4-qubit transverse 
 
 #### Swap Test
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_swap.png" alt="swap" style="zoom:40%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_swap.png" alt="swap" style="zoom:30%;" />
 
 a. The swap test circuit for comparing two 5-qubit states. The gate within the green box is the controlled-SWAP gate. b. Mean Absolute Errors (MAE) between the mitigated fidelity values and the ground truth values.
 
 #### Quantum Approximate Optimisation Algorithms (QAOA)
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_qaoa.png" alt="swap" style="zoom:40%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_qaoa.png" alt="swap" style="zoom:30%;" />
 
 a. An instance of a graph for for the Max-cut problem. b. The variational ansatz for implementing QAOA algorithm. c. Ideal, Noisy and Mitigated frequency of measurement results.
 
@@ -59,7 +59,7 @@ a. MAE between the mitigated measurement expectation values for phase damping no
 
 #### Continuous-variable process
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_cv.png" alt="swap" style="zoom:70%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_cv.png" alt="swap" style="zoom:50%;" />
 
 a. Fidelity values between the noisy/mitigated state and the ideal state. b. Snapshots of the point-wise measurement results of the state at different time points.
 
