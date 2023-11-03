@@ -4,11 +4,12 @@ __pycache__/
 .idea/
 .tmp/
 .vscode/
-data*/
-*.pkl
+data_mitigate/
 *.pt
 weights/
 runs/
-environments/noise_models
+environments/
 visualization
-imgs/
+figures/
+LBEM_for_VQE/
+data/
