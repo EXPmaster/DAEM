@@ -41,19 +41,19 @@ a. The variational ansatz for preparing the ground states of 4-qubit transverse 
 
 #### Swap Test
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_swap.png" alt="swap" style="zoom:50%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_swap.png" alt="swap" style="zoom:40%;" />
 
 a. The swap test circuit for comparing two 5-qubit states. The gate within the green box is the controlled-SWAP gate. b. Mean Absolute Errors (MAE) between the mitigated fidelity values and the ground truth values.
 
 #### Quantum Approximate Optimisation Algorithms (QAOA)
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_qaoa.png" alt="swap" style="zoom:50%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_qaoa.png" alt="swap" style="zoom:40%;" />
 
 a. An instance of a graph for for the Max-cut problem. b. The variational ansatz for implementing QAOA algorithm. c. Ideal, Noisy and Mitigated frequency of measurement results.
 
 #### Spin-system dynamics
 
-<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_large.png" alt="swap" style="zoom:60%;" />
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_large.png" alt="swap" style="zoom:50%;" />
 
 a. MAE between the mitigated measurement expectation values for phase damping noise model and ideal expectation values. b. MAE between the mitigated measurement expectation values for amplitude damping noise model and ideal expectation values.
 
