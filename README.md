@@ -1,142 +1,109 @@
-## Quantum Error Mitigation
-
-This project aims at mitigating errors for NISQ quantum circuits caused by noise using deep learning algorithms: 1. GAN; 2. Supervised ANN with MSE loss. We assume that the circuit layout and error model is fixed, while the observable is alterable.
+# <div align="center">Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered Neural Model</div>
 
 
 
-### Methodology
-
-#### Circuit Layout
-
-The following circuit is random generated and is used to train the mitigation model. Random quantum gates are sampled from set of single qubit gates - `{X, Y, Z, H, S, T, RX, RY, RZ} ` , and two-qubit gates - `{CNOT, CZ}`.
-
-![img]()
-
-A mitigation gate (denoted by $\mathbf{P}$) is inserted before and after each gate. Each mitigation gate is one of 16 basis operations sampled from a distribution.
-
-<img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/basis_ops.png" alt="img" width=400 height=400 /> 
-
-Depolarizing noise is applied after each single qubit gate, two-qubit gate and mitigation gate:
-$$
-\mathcal E(\rho)=(1-p)\rho + \frac{p}{3}(X\rho X + Y\rho Y + Z\rho Z),
-$$
-where $p=0.01$.
+> [** Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered
+> Neural Model **]()
+>
+> by Manwen Liao<sup>1</sup> \*, [Yan Zhu](https://scholar.google.com/citations?user=sC4bSoEAAAAJ&hl=en)<sup>1</sup> \*, [Giulio Chiribella](https://scholar.google.com/citations?user=4ob0VU4AAAAJ&hl=en)<sup>1, 2, 3</sup>, [Yuxiang Yang](https://scholar.google.com/citations?user=jpFFDKcAAAAJ&hl=en)<sup>1 :email:</sup>
+>
+> <sup>1</sup> QICI Quantum Information and Computation Initiative, Department of Computer Science, The    University of Hong Kong, Pokfulam Road, Hong Kong
+>
+> <sup>2</sup> Department of Computer Science, Parks Road, Oxford, OX1 3QD, United Kingdom
+>
+> <sup>3</sup> Perimeter Institute for Theoretical Physics, Waterloo, Ontario N2L 2Y5, Canada
+>
+> (\*) equal contribution, (<sup>:email:</sup>) corresponding author.
 
 
 
-#### Model
+## Data Augmentation Empowered Neural Model (DAEM)
 
-The whole framework consists of two models:
+### The Illustration of DAEM
 
-* A surrogate model;
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/DAEM_framework.png" alt="daem" style="zoom:50%;" />
 
-* A generator model.
+### Highlights of Our Framework
 
-The generator model is used to generate a probability distribution of 16 basis operations of each mitigation gate, while the surrogate model maps the distribution to noisy measurement result. To achieve error mitigaiton, we must generate a proper distribution such that the noisy measurement result predicted by the surrogate model is close to noise-free result.
-
-* Surrogate model
-
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/surrogate_model.png" alt="img" width=200 height=100 align=center />
-
-* Generator model
-
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/generator.png" alt="img" width=200 height=100 align=center />
-
-* GAN
-
-  * We need an additional discriminator model, which output the probability of  the input measurement result being noise-free.
-
-  <img src="https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/discriminator.png" alt="img" width=250 height=100 align=center />
+* Exemption from noise-free statistics reliance: Our proposed architecture eliminates the need for noise-free statistics acquired from the target quantum process. This feature allows the model to be potentially applicable in real-world experiments. Additionally, while our model still relies on noisy measurement data across different noise levels, it does not assume the knowledge of noise level values.
+* Versatility on various types of quantum processes: The proposed architecture is flexible and can accept different forms of measurement statistics as inputs, making it suitable for various quantum processes, including quantum circuits, continuous-variable quantum processes, and dynamics of large-scale spin systems.
+* Adaptability to diverse settings and noise models: Our data-driven model can be trained using measurement statistics without relying on rigid assumptions about noise models or requiring a specific initial state or measurement setting. Furthermore, it is capable of mitigating not only the error of observable expectations, but also the distortion of measurement probability distributions.
 
 
 
-#### Training Strategy
+### Error Mitigation Results
 
-1. Randomly generate some distributions and observables. Construct mitigation gates using gates sampled from the 16 basis operations according to the distributions. Then run noisy simulation. Each simulation uses newly sampled mitigation gates and measures once. Meanwhile, run ideal simulation given the original circuit layout (without mitigation gates) and the corresponding observable.
-2. Train the surrogate model using the noisy simulation data, minimizing the $L_2$ distance between surrogate model output and noisy measurement result under the generated distribution.
-3. Train a supervised model by minimizing the $L_2$ distance between the output of the surrogate model and the ideal simulation data. Or alternatively, introduce a discriminator which tells whether the generated data is noisy, and train a GAN.
+#### Variational Quantum Eigensolvers (VQE)
 
-`TODO: algorithm pseudocode` 
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_vqe.png" alt="vqe" style="zoom:67%;" />
+
+a. The variational ansatz for preparing the ground states of 4-qubit transverse Ising models. b. Mean Absolute Errors (MAE) between the mitigated measurement expectation values for phase damping noise model and ideal expectation values. c.Mean Absolute Errors (MAE) between the mitigated measurement expectation values for amplitude damping noise model and ideal expectation values. d. Schematic diagram of quantum circuits affected by Non-Markovian noise. e. Mean Absolute Errors (MAE) between the mitigated measurement expectation values for considered Non-Markovian noise model and ideal expectation values. 
+
+#### Swap Test
+
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_swap.png" alt="swap" style="zoom:50%;" />
+
+a. The swap test circuit for comparing two 5-qubit states. The gate within the green box is the controlled-SWAP gate. b. Mean Absolute Errors (MAE) between the mitigated fidelity values and the ground truth values.
+
+#### Quantum Approximate Optimisation Algorithms (QAOA)
+
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_qaoa.png" alt="swap" style="zoom:50%;" />
+
+a. An instance of a graph for for the Max-cut problem. b. The variational ansatz for implementing QAOA algorithm. c. Ideal, Noisy and Mitigated frequency of measurement results.
+
+#### Spin-system dynamics
+
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_large.png" alt="swap" style="zoom:60%;" />
+
+a. MAE between the mitigated measurement expectation values for phase damping noise model and ideal expectation values. b. MAE between the mitigated measurement expectation values for amplitude damping noise model and ideal expectation values.
+
+#### Continuous-variable process
+
+<img src="https://github.com/EXPmaster/DAEM/raw/master/imgs/figure_cv.png" alt="swap" style="zoom:70%;" />
+
+a. Fidelity values between the noisy/mitigated state and the ideal state. b. Snapshots of the point-wise measurement results of the state at different time points.
+
+
 
 ---
 
-### Benchmark & Performance
+### Requirement
 
-#### Performance on random circuit
+This codebase has been developed with python 3.7, PyTorch 1.12+:
 
-Validation resulst evaluated on the testset of the generated circuit, where the metric is mean absolute deviation:
-$$
-D(\mathbf y_{\mathrm{pred}}, \mathbf y_{\mathrm{true}}) = \frac{1}{n}\sum_{i=1}^n \left|y^{(i)}_{\mathrm{pred}} - y^{(i)}_{\mathrm{true}}\right|
-$$
-
-|   Model    | Absolute Deviation | Mitigation Ratio |
-| :--------: | :----------------: | :--------------: |
-|    None    |      0.179332      |        -         |
-| Supervised |      0.002401      |      74.69       |
-|    GAN     |      0.008902      |      20.16       |
-
-
-
-#### Performance on IBMQ device
-
-Validation results on IBM quantum device (ibmq_santiago).
-
-* Benchmark circuit layout 1
-
-  ![img](https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/twoqubit_circuit.png)
-
-* Results
-
-  |   Model    | Absolute Deviation | Mitigation Ratio |
-  | :--------: | :----------------: | :--------------: |
-  |    None    |                    |        -         |
-  | Supervised |                    |                  |
-  |    GAN     |                    |                  |
-
-
-
-* Benchmark circuit layout 2
-
-  ![img](https://github.com/EXPmaster/QuantumErrorMitigation/raw/master/imgs/swaptest_circuit.png)
-
-* Results
-
-  |   Model    | Absolute Deviation | Mitigation Ratio |
-  | :--------: | :----------------: | :--------------: |
-  |    None    |                    |        -         |
-  | Supervised |                    |                  |
-  |    GAN     |                    |                  |
-
----
-
-
-### Usage
-To train the old model:
-```
-python exp_torch/train.py --model-type QuantumModelv2 --logdir runs/v2
+```bash
+conda install pytorch==1.12.1 cudatoolkit=10.2 -c pytorch
 ```
 
-GAN model is in the directory `exp_gan`. First generate some data for training surrogate model.
-```
-python my_envs.py
+See `requirements.txt` for additional requirements.
+
+```bash
+pip install -r requirements.txt
 ```
 
-Next, train surrogate model with the following command:
-```
-python train_surrogate.py
+### Data
+
+The data for training can be downloader from [here](https://drive.google.com/drive/folders/1XTBJeP23kFQKgbU001bCWILTV8S9lh9a?usp=share_link). Alternatively, you may refer to `src/dataset.py`, `src/error_mitigation_data`, and `src/TensornetSimulator` to generate your training data.
+
+### Training
+
+To train neural model for error mitigation of quantum algorithms and continuous-variable process, run:
+
+```bash
+python src/train_supervise.py --train-path /path/to/train_file --test-path /path/to/validation_file
 ```
 
-Then generate data for training a mitigation model:
-```
-python datasets.py
+To train neural model for mitigating errors in continuous-variable process, run:
+
+```bash
+python src/train_cv.py --train-path /path/to/train_file --test-path /path/to/validation_file
 ```
 
-After everything is ready, you can either train a supervised model
-```
-python train_mitigate.py
-```
+### Evaluate
 
-or train a GAN
-```
-python train_gan.py
-```
+The evaluation results can be downloaded from [here](https://drive.google.com/drive/folders/1XTBJeP23kFQKgbU001bCWILTV8S9lh9a?usp=share_link). You may evaluate and compare DAEM with ZNE and CDR by running `benchmark.py`.
+
+
+
+## Citation
+

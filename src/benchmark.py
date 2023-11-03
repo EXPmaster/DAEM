@@ -32,7 +32,6 @@ from utils import AverageMeter, abs_deviation, gen_rand_obs
 from my_envs import IBMQEnv
 from datasets import MitigateDataset
 from cdr_trainer import CDRTrainer
-from lbem_trainer import LBEMTrainer2
 from zne_trainer import ZNETrainer
 
 
