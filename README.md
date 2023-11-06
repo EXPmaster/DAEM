@@ -3,7 +3,7 @@
 
 
 > [**Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered
-> Neural Model**]()
+> Neural Model**](https://arxiv.org/abs/2311.01727)
 >
 > by Manwen Liao<sup>1</sup> \*, [Yan Zhu](https://scholar.google.com/citations?user=sC4bSoEAAAAJ&hl=en)<sup>1</sup> \*, [Giulio Chiribella](https://scholar.google.com/citations?user=4ob0VU4AAAAJ&hl=en)<sup>1, 2, 3</sup>, [Yuxiang Yang](https://scholar.google.com/citations?user=jpFFDKcAAAAJ&hl=en)<sup>1 :email:</sup>
 >
@@ -83,7 +83,7 @@ pip install -r requirements.txt
 
 ### Data
 
-The data for training can be downloader from [here](https://drive.google.com/drive/folders/1XTBJeP23kFQKgbU001bCWILTV8S9lh9a?usp=share_link). Alternatively, you may refer to `src/dataset.py`, `src/error_mitigation_data`, and `src/TensornetSimulator` to generate your training data.
+The data for training can be downloaded from [here](https://drive.google.com/drive/folders/1XTBJeP23kFQKgbU001bCWILTV8S9lh9a?usp=share_link). Alternatively, you may refer to `src/dataset.py`, `src/error_mitigation_data`, and `src/TensornetSimulator` to generate your training data.
 
 ### Training
 
@@ -107,3 +107,13 @@ The evaluation results can be downloaded from [here](https://drive.google.com/dr
 
 ## Citation
 
+```BibTeX
+@misc{liao2023flexible,
+      title={Flexible Error Mitigation of Quantum Processes with Data Augmentation Empowered Neural Model}, 
+      author={Manwen Liao and Yan Zhu and Giulio Chiribella and Yuxiang Yang},
+      year={2023},
+      eprint={2311.01727},
+      archivePrefix={arXiv},
+      primaryClass={quant-ph}
+}
+```
